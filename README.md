@@ -50,12 +50,16 @@ The AI Job Scam Detector is a **FastAPI-based backend** that combines multiple m
 
 ## Architecture & Tech Stack
 
+### Backend
+
 | Layer                   | Technology                                                                            |
 | ----------------------- | ------------------------------------------------------------------------------------- |
 | **Web Framework**       | FastAPI (Python)                                                                      |
+| **ASGI Server**         | Uvicorn                                                                               |
 | **Database**            | SQLite 3 (file-based, `scam_detector.db`)                                             |
-| **ML / NLP**            | scikit-learn, TF-IDF Vectorization, Random Forest Regressor, Random Forest Classifier |
-| **AI Text Detection**   | Random Forest Classifier trained on TF-IDF features                                   |
+| **ML / NLP**            | scikit-learn, TF-IDF Vectorization, Random Forest, SVM, Logistic Regression, Gradient Boosting, Naive Bayes |
+| **AI Text Detection**   | Random Forest Classifier trained on TF-IDF features (1 GB Human vs AI dataset)        |
+| **Salary Prediction**   | Random Forest Regressor Pipeline (trained on synthetic salary dataset)                 |
 | **NER**                 | spaCy (`en_core_web_sm` pipeline)                                                     |
 | **Web Scraping**        | BeautifulSoup4, Requests                                                              |
 | **Domain Analysis**     | python-whois                                                                          |
@@ -63,38 +67,86 @@ The AI Job Scam Detector is a **FastAPI-based backend** that combines multiple m
 | **PDF Generation**      | fpdf2                                                                                 |
 | **Authentication**      | JWT (python-jose), bcrypt (passlib)                                                   |
 | **Model Serialization** | joblib (`.pkl` files)                                                                 |
-| **Training Data**       | `fake_job_postings.csv` (~50 MB, 17,880 records)                                      |
+
+### Frontend
+
+| Layer              | Technology                           |
+| ------------------ | ------------------------------------ |
+| **Framework**      | Next.js 16 (App Router)              |
+| **UI Library**     | React 19                             |
+| **Language**       | TypeScript 5                         |
+| **Styling**        | Tailwind CSS 4                       |
+| **Package Manager**| Bun                                  |
+
+### Datasets
+
+| Dataset                          | Size     | Records  | Purpose                                             |
+| -------------------------------- | -------- | -------- | --------------------------------------------------- |
+| `fake_job_postings.csv`          | ~50 MB   | 17,880   | Job scam detection model training (binary label `fraudulent`) |
+| `AI_Human.csv`                   | ~1.06 GB | ~500,000 | AI-generated text detection (Human vs AI classification)      |
+| `synthetic_salary_dataset.csv`   | ~28 KB   | ~500     | Salary anomaly prediction (position, experience, education, industry, location → salary in INR) |
 
 ---
 
 ## File Structure
 
 ```
-backend/
-├── main.py                  # FastAPI app — all routes and endpoint definitions
-├── database.py              # SQLite schema initialization (8 tables)
-├── auth.py                  # JWT authentication (register, login, token decoding)
-├── ai_text_detector.py      # ★ AI-generated text detector (Trained Random Forest ML classifier)
-├── ner_extractor.py         # ★ NER module — spaCy entity extraction for jobs & resumes
-├── scraper.py               # Web scraper — extracts description, salary, email + NER entities
-├── model.py                 # Model loader — lazy-loads model.pkl and vectorizer.pkl
-├── train_model.py           # Multi-model training pipeline (5 classifiers)
-├── risk_engine.py           # Weighted risk score computation (NLP + salary + domain)
-├── explainer.py             # Explainable AI — feature contributions, red flags + NER + AI detection
-├── resume_parser.py         # Resume text extraction, structured parsing + NER entities
-├── resume_matcher.py        # TF-IDF cosine similarity matching + ATS scoring
-├── salary_predictor.py      # ★ ML salary prediction (RF Regressor Pipeline based on dataset)
-├── company_scorer.py        # Company trust scoring (domain, email, social, community + NER)
-├── community.py             # Scam report CRUD, voting, auto-blacklisting
-├── analytics.py             # Dashboard statistics, trends, model comparison
-├── report_generator.py      # PDF report generation (scan reports, match reports)
-├── requirements.txt         # Python dependencies
-├── model.pkl                # Serialized best ML model (~40 KB)
-├── vectorizer.pkl           # Serialized TF-IDF vectorizer (~201 KB)
-├── salary_model.pkl         # Serialized RF salary regressor (auto-generated)
-├── fake_job_postings.csv    # Training dataset (~50 MB)
-├── Fake Postings.csv        # Alternate/smaller dataset (~3 MB)
-└── reports/                 # Generated PDF reports output directory
+ai-job-scam-detector/
+├── README.md                        # This file
+├── API_DOCS.md                      # API endpoint documentation
+├── HOW_IT_WORKS.md                  # High-level system overview
+├── TECHNICAL_ML_REPORT.md           # ML model evaluation report
+│
+├── backend/
+│   ├── main.py                      # FastAPI app — all routes and endpoint definitions
+│   ├── database.py                  # SQLite schema initialization (8 tables)
+│   ├── auth.py                      # JWT authentication (register, login, token decoding)
+│   ├── ai_text_detector.py          # ★ AI-generated text detector (Random Forest classifier)
+│   ├── ner_extractor.py             # ★ NER module — spaCy entity extraction for jobs & resumes
+│   ├── scraper.py                   # Web scraper — extracts description, salary, email + NER
+│   ├── model.py                     # Model loader — lazy-loads model.pkl and vectorizer.pkl
+│   ├── train_model.py               # Multi-model training pipeline (5 classifiers)
+│   ├── risk_engine.py               # Weighted risk score computation (NLP + salary + domain)
+│   ├── explainer.py                 # Explainable AI — feature contributions, red flags + NER
+│   ├── resume_parser.py             # Resume text extraction, structured parsing + NER
+│   ├── resume_matcher.py            # TF-IDF cosine similarity matching + ATS scoring
+│   ├── salary_predictor.py          # ★ ML salary prediction (RF Regressor Pipeline)
+│   ├── company_scorer.py            # Company trust scoring (domain, email, social, community)
+│   ├── community.py                 # Scam report CRUD, voting, auto-blacklisting
+│   ├── analytics.py                 # Dashboard statistics, trends, model comparison
+│   ├── report_generator.py          # PDF report generation (scan & match reports)
+│   ├── requirements.txt             # Python dependencies
+│   ├── model_metrics.json           # All 5 model metrics + best model info
+│   ├── scam_detector.db             # SQLite runtime database (auto-created)
+│   │
+│   ├── datasets/                         # Training datasets
+│   │   ├── fake_job_postings.csv         #   Job scam detection (~50 MB, 17,880 rows)
+│   │   ├── Fake Postings.csv             #   Alternate/smaller dataset (~3 MB, 1,000 rows)
+│   │   ├── AI_Human.csv                  #   AI text detection (~1.06 GB, ~500K rows)
+│   │   └── synthetic_salary_dataset.csv  #   Salary prediction (~28 KB, ~500 rows)
+│   │
+│   ├── models/                               # Serialized ML models (auto-generated by training)
+│   │   ├── model.pkl                         #   Best scam detection model (~40 KB)
+│   │   ├── vectorizer.pkl                    #   TF-IDF vectorizer for scam detection (~197 KB)
+│   │   ├── all_models.pkl                    #   All 5 trained classifiers (~5.7 MB)
+│   │   ├── ai_detector_model.pkl             #   AI text detection classifier (~30.8 MB)
+│   │   ├── ai_detector_vectorizer.pkl        #   TF-IDF vectorizer for AI detection (~190 KB)
+│   │   └── salary_model.pkl                  #   RF salary regressor pipeline (~1.9 MB)
+│   │
+│   └── reports/                              # Generated PDF reports output directory
+│
+└── frontend/
+    ├── package.json                 # Bun/npm dependencies
+    ├── next.config.ts               # Next.js configuration
+    ├── tsconfig.json                # TypeScript configuration
+    ├── postcss.config.mjs           # PostCSS (Tailwind) config
+    ├── eslint.config.mjs            # ESLint configuration
+    ├── app/
+    │   ├── layout.tsx               # Root layout (Geist font, global styles)
+    │   ├── page.tsx                 # Home page
+    │   ├── globals.css              # Tailwind CSS + theme variables
+    │   └── favicon.ico              # App icon
+    └── public/                      # Static assets
 ```
 
 ---
@@ -293,7 +345,7 @@ User submits URL
        │
        ▼
 ┌─────────────┐     ┌──────────────┐     ┌────────────────┐
-│  scraper.py │────▶│ risk_engine  │────▶│  explainer.py  │
+│  scraper.py │───▶│ risk_engine  │────▶│  explainer.py  │
 │             │     │   .py        │     │                │
 │ HTTP GET    │     │ compute_risk │     │ explain_       │
 │ BeautifulSoup│    │              │     │ prediction     │
@@ -429,12 +481,23 @@ fake_job_postings.csv
 └─────────────────────────────────────┘
 ```
 
-**Training dataset:** `fake_job_postings.csv` — ~17,880 records with binary label `fraudulent` (0 = legitimate, 1 = scam). Column `text` is created by concatenating 13 text fields.
+**Training dataset:** `datasets/fake_job_postings.csv` — ~17,880 records with binary label `fraudulent` (0 = legitimate, 1 = scam). Column `text` is created by concatenating 13 text fields.
 
-**Serialized artifacts:**
+**Serialized artifacts (saved to `models/`):**
 
-- `model.pkl` (~40 KB) — best performing model (typically Logistic Regression)
-- `vectorizer.pkl` (~201 KB) — fitted TF-IDF vectorizer with 5000-feature vocabulary
+- `model.pkl` (~40 KB) — best performing model (currently **SVM Linear** at **98.55% accuracy**)
+- `vectorizer.pkl` (~197 KB) — fitted TF-IDF vectorizer with 5000-feature vocabulary
+- `all_models.pkl` (~5.7 MB) — all 5 trained classifiers for comparison
+
+**Latest model comparison results:**
+
+| Model               | Accuracy | Precision | Recall | F1 Score |
+| -------------------- | -------- | --------- | ------ | -------- |
+| **SVM (Linear)**     | **98.55%** | 96.18%  | 72.83% | 82.89%   |
+| Random Forest        | 97.99%   | 100.0%    | 58.38% | 73.72%   |
+| Gradient Boosting    | 97.79%   | 91.96%    | 59.54% | 72.28%   |
+| Logistic Regression  | 97.40%   | 100.0%    | 46.24% | 63.24%   |
+| Naive Bayes          | 96.98%   | 88.24%    | 43.35% | 58.14%   |
 
 ---
 
@@ -560,7 +623,7 @@ Input text (job posting or resume)
 ┌────────────────────────────────────┐
 │ spaCy NLP Pipeline                 │
 │                                    │
-│ Tokenizer → Tagger → Parser →     │
+│ Tokenizer → Tagger → Parser →      │
 │ NER → Entity Ruler                 │
 │                                    │
 │ Extracted entity types:            │
@@ -646,7 +709,7 @@ File Upload (PDF / DOCX / TXT, max 5MB)
 │    (42 skills)         │
 │ 6. tools               │
 │    (32 skills)         │
-│ 7. soft_skills          │
+│ 7. soft_skills         │
 │    (19 skills)         │
 │                        │
 │ Uses regex word-       │
@@ -659,9 +722,9 @@ File Upload (PDF / DOCX / TXT, max 5MB)
 │ Education Extraction   │
 │                        │
 │ Regex patterns for:    │
-│ B.S., B.Tech, M.S.,   │
-│ MBA, Ph.D., Diploma,  │
-│ 10th, 12th, etc.      │
+│ B.S., B.Tech, M.S.,    │
+│ MBA, Ph.D., Diploma,   │
+│ 10th, 12th, etc.       │
 │                        │
 │ Returns top 5 matches  │
 └────────────────────────┘
@@ -740,7 +803,7 @@ Resume Data (from DB) + Job Text (URL or raw text)
 │                                │
 │ cosine_similarity(resume_vec,  │
 │                   job_vec)     │
-│ → similarity ∈ [0.0, 1.0]     │
+│ → similarity ∈ [0.0, 1.0]      │
 └────────────────────────────────┘
     │
     ▼
@@ -763,7 +826,7 @@ Resume Data (from DB) + Job Text (URL or raw text)
 │ Step 3: Combined Match Score   │
 │                                │
 │ match_score = (0.4 × cosine +  │
-│   0.6 × skill_ratio) × 100    │
+│   0.6 × skill_ratio) × 100     │
 │                                │
 │ Capped at 100                  │
 └────────────────────────────────┘
@@ -808,7 +871,7 @@ Resume Data (from DB) + Job Text (URL or raw text)
 │ 10 pts: experience mention     │
 │ 10 pts: word count             │
 │   200-1000 words = 10pts       │
-│   <200 = 3pts, >1000 = 5pts   │
+│   <200 = 3pts, >1000 = 5pts    │
 └────────────────────────────────┘
     │
     ▼
@@ -871,7 +934,7 @@ Salary String + Job Text
     │
     ▼
 ┌────────────────────────────────────────┐
-│ Step 4: Anomaly Scoring               │
+│ Step 4: Anomaly Scoring                │
 │                                        │
 │ Compare parsed avg_salary to ML        │
 │ predicted salary (converted to USD/INR)│
@@ -948,7 +1011,7 @@ Company Name + Domain (optional) + Email (optional)
 ┌─────────────────────────────────────────────┐
 │ Signal 4: Community Reports (30% weight)    │
 │                                             │
-│ Query scam_reports + company_blacklist DB:   │
+│ Query scam_reports + company_blacklist DB:  │
 │ Blacklisted → 0 pts                         │
 │ > 5 reports → 10 pts                        │
 │ > 0 reports → 40 pts                        │
@@ -988,7 +1051,7 @@ INSERT into scam_reports table
 │                              │
 │ If count ≥ 3:                │
 │   trust_score =              │
-│     max(0, 50 - count × 10) │
+│     max(0, 50 - count × 10)  │
 │                              │
 │   INSERT or UPDATE           │
 │   company_blacklist          │
@@ -1166,48 +1229,91 @@ Triggered by `POST /api/reports/generate-match-pdf`. Sections:
 
 ## Data Files & Serialized Models
 
-| File                    | Size    | Format        | Description                                                                             |
-| ----------------------- | ------- | ------------- | --------------------------------------------------------------------------------------- |
-| `fake_job_postings.csv` | ~50 MB  | CSV           | Main training dataset (~17,880 rows, 17 columns, binary label `fraudulent`)             |
-| `Fake Postings.csv`     | ~3 MB   | CSV           | Alternate/smaller dataset                                                               |
-| `model.pkl`             | ~40 KB  | joblib pickle | Best trained ML model (selected by accuracy)                                            |
-| `vectorizer.pkl`        | ~201 KB | joblib pickle | Fitted TF-IDF vectorizer (5000 features, unigrams + bigrams, English stopwords removed) |
-| `scam_detector.db`      | Dynamic | SQLite 3      | Runtime database (all 8 tables)                                                         |
-| `model_metrics.json`    | Dynamic | JSON          | All 5 model metrics + best model info + dataset metadata                                |
+### Training Datasets (`backend/datasets/`)
+
+| File                           | Size     | Format | Records  | Description                                                                                           |
+| ------------------------------ | -------- | ------ | -------- | ----------------------------------------------------------------------------------------------------- |
+| `fake_job_postings.csv`        | ~50 MB   | CSV    | 17,880   | Main scam detection dataset — 17 columns, binary label `fraudulent` (0 = legit, 1 = scam). 13 text fields concatenated for training. |
+| `AI_Human.csv`                 | ~1.06 GB | CSV    | ~500,000 | Human vs AI-generated text dataset — columns: `text` (content), `generated` (0 = Human, 1 = AI). Sampled to 40K records during training to avoid OOM. |
+| `synthetic_salary_dataset.csv` | ~28 KB   | CSV    | ~500     | Salary prediction dataset — columns: `Position`, `YearsExperience`, `EducationLevel`, `Industry`, `Location`, `Salary(INR)`. |
+
+### Serialized Models (`backend/models/`)
+
+| File                         | Size     | Format        | Description                                                                             |
+| ---------------------------- | -------- | ------------- | --------------------------------------------------------------------------------------- |
+| `model.pkl`                  | ~40 KB   | joblib pickle | Best scam detection model (SVM Linear, 98.55% accuracy)                                 |
+| `vectorizer.pkl`             | ~197 KB  | joblib pickle | Fitted TF-IDF vectorizer (5000 features, unigrams + bigrams, English stopwords removed) |
+| `all_models.pkl`             | ~5.7 MB  | joblib pickle | All 5 trained classifiers (LR, RF, SVM, NB, GB) for model comparison                   |
+| `ai_detector_model.pkl`      | ~30.8 MB | joblib pickle | Random Forest classifier for AI-generated text detection                                |
+| `ai_detector_vectorizer.pkl` | ~190 KB  | joblib pickle | TF-IDF vectorizer for AI text detection (5000 features)                                 |
+| `salary_model.pkl`           | ~1.9 MB  | joblib pickle | Random Forest Regressor pipeline with OneHotEncoder + StandardScaler for salary prediction |
+
+### Runtime Files
+
+| File                 | Size    | Format   | Description                                              |
+| -------------------- | ------- | -------- | -------------------------------------------------------- |
+| `scam_detector.db`   | Dynamic | SQLite 3 | Runtime database (all 8 tables, auto-created on startup) |
+| `model_metrics.json` | Dynamic | JSON     | All 5 model metrics + best model info + dataset metadata |
 
 ---
 
 ## Dependencies
 
+### Backend (Python)
+
 ```
-fastapi          # Web framework
-uvicorn          # ASGI server
-scikit-learn     # ML models, TF-IDF, cosine similarity
-pandas           # Data loading and manipulation
-numpy            # Numerical operations
-beautifulsoup4   # HTML parsing for web scraping
-requests         # HTTP requests for scraping
-python-whois     # WHOIS domain lookups
-tldextract       # TLD extraction (unused in current code but available)
-joblib           # Model serialization/deserialization
-tqdm             # Progress bars (training)
-python-jose      # JWT encoding/decoding
-passlib          # Password hashing (bcrypt)
-python-multipart # File upload handling
-PyPDF2           # PDF text extraction (resume parsing)
-python-docx      # DOCX text extraction (resume parsing)
-fpdf2            # PDF generation (reports)
-spacy            # Named Entity Recognition (NER)
+fastapi              # Web framework
+uvicorn              # ASGI server
+scikit-learn         # ML models, TF-IDF, cosine similarity
+pandas               # Data loading and manipulation
+numpy                # Numerical operations
+beautifulsoup4       # HTML parsing for web scraping
+requests             # HTTP requests for scraping
+python-whois         # WHOIS domain lookups
+tldextract           # TLD extraction
+joblib               # Model serialization/deserialization
+tqdm                 # Progress bars (training)
+python-jose          # JWT encoding/decoding
+passlib              # Password hashing (bcrypt)
+python-multipart     # File upload handling
+PyPDF2               # PDF text extraction (resume parsing)
+python-docx          # DOCX text extraction (resume parsing)
+fpdf2                # PDF generation (reports)
+spacy                # Named Entity Recognition (NER)
+pydantic[email]      # Data validation with email support
+```
+
+### Frontend (Node.js)
+
+```
+next@16              # React framework (App Router)
+react@19             # UI library
+react-dom@19         # React DOM renderer
+tailwindcss@4        # Utility-first CSS framework
+typescript@5         # Type-safe JavaScript
 ```
 
 ---
 
 ## Setup & Running
 
-### 1. Install Dependencies
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+ or Bun (for frontend)
+
+### 1. Backend Setup
 
 ```bash
 cd backend
+python -m venv .venv
+
+# Activate virtual environment
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
+
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
@@ -1215,20 +1321,60 @@ python -m spacy download en_core_web_sm
 ### 2. Train Models (First Time Only)
 
 ```bash
+cd backend
+
+# Train the scam detection model (5 classifiers compared, best saved)
 python train_model.py
+
+# Train the salary prediction model
+python salary_predictor.py
+
+# Train the AI text detector
+python ai_text_detector.py
 ```
 
-This generates `model.pkl`, `vectorizer.pkl`, and `model_metrics.json`.
+This generates:
 
-### 3. Run the Server
+- `models/model.pkl` + `models/vectorizer.pkl` — best scam detection model + TF-IDF vectorizer
+- `models/all_models.pkl` — all 5 classifiers for comparison
+- `models/salary_model.pkl` — salary regressor pipeline
+- `models/ai_detector_model.pkl` + `models/ai_detector_vectorizer.pkl` — AI text detector
+- `model_metrics.json` — training metrics for all models
+
+> **Note:** The AI text detector model will auto-train on first API call if models are not found, provided the `AI_Human.csv` dataset is present in `datasets/`. Training samples 40K records from the ~500K dataset to avoid memory issues.
+
+### 3. Run the Backend Server
 
 ```bash
+cd backend
 uvicorn main:app --reload --port 8000
 ```
 
-### 4. Interactive API Docs
+The API will be available at `http://localhost:8000`. Interactive Swagger docs at `http://localhost:8000/docs`.
 
-Visit `http://localhost:8000/docs` for the Swagger UI.
+### 4. Frontend Setup
+
+```bash
+cd frontend
+
+# Install dependencies (Bun recommended, npm also works)
+bun install
+# or: npm install
+
+# Start development server
+bun dev
+# or: npm run dev
+```
+
+The frontend will be available at `http://localhost:3000`.
+
+### 5. Additional Documentation
+
+| File                    | Description                                       |
+| ----------------------- | ------------------------------------------------- |
+| `API_DOCS.md`           | Detailed API endpoint reference                   |
+| `HOW_IT_WORKS.md`       | High-level system overview and feature walkthrough |
+| `TECHNICAL_ML_REPORT.md`| ML model evaluation and performance analysis      |
 
 ---
 

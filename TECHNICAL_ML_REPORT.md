@@ -55,7 +55,7 @@ Additionally, 8 regex-based pattern detectors identify known scam templates (upf
 
 ## 3. AI-Generated Text Detection — Random Forest Classifier
 
-AI-generated job postings are detected using a **Random Forest Classifier** trained on a large-scale text corpus (`AI_Human.csv`, ~1GB). The text undergoes TF-IDF vectorization (10,000 features, up to bigrams) before being passed to the classifier.
+AI-generated job postings are detected using a **Random Forest Classifier** trained on a large-scale text corpus (`AI_Human.csv`, ~1GB, ~500K samples, downsampled to 40K for training). The text undergoes TF-IDF vectorization (5,000 features, unigrams + bigrams, English stopwords removed) before being passed to the classifier.
 
 The model outputs probability estimates for both classes (Human vs. AI). Thresholds are configured as:
 
@@ -84,9 +84,11 @@ X = [Position, YearsExperience, EducationLevel, Industry, Location]
 
 The model's prediction serves as the "expected salary" baseline. Anomaly scoring compares the parsed job salary against the ML pipeline prediction:
 
-- **Deviation >100% from ML prediction** → +0.30 anomaly score
-- **Deviation >50%** → +0.15
-- Combined with heuristic checks (wide range width, suspiciously round numbers).
+- **Posted salary > 2.5× prediction** → +0.60 anomaly score (strong scam indicator)
+- **Posted salary > 1.8× prediction** → +0.40 (significantly above market)
+- **Posted salary < 0.4× prediction** → +0.30 (unusually low, potentially exploitative)
+- **Deviation > 50%** → +0.20 (unusual deviation)
+- Combined with secondary heuristic checks (wide range spread: +0.20, suspiciously round numbers: +0.05). Score capped at 1.0.
 
 ---
 

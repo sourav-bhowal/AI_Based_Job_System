@@ -49,7 +49,7 @@ Imagine you're a job seeker. You find a job posting online. How do you know if i
   ├──────────────────────────────────────────────┤
   │  Layer 3: AI Text Generator Detection        │
   │  Was this post written by ChatGPT?           │
-  │  Statistical linguistic analysis             │
+  │  Random Forest ML classifier on TF-IDF       │
   ├──────────────────────────────────────────────┤
   │  Layer 4: NER (Named Entity Recognition)     │
   │  Finds company names, locations, salaries    │
@@ -128,11 +128,12 @@ We train **5 different models** and pick the best one. Here's why each was inclu
 
 Because you don't know which works best until you try. By training all 5 and comparing metrics (accuracy, precision, recall, F1), we scientifically pick the best one. The winner is saved as `model.pkl`.
 
-**In our case, Logistic Regression usually wins** — not because it's the "smartest", but because:
+**In our case, SVM (Linear) wins** with **98.55% accuracy** and the best F1-score (82.89%). Here's why:
 
-1. Text classification with TF-IDF + Logistic Regression is a proven, battle-tested combo
-2. It's the only model in our list that gives us **explainability** (we can show _which words_ caused the flag)
-3. The dataset is clean enough that simpler models perform just as well as complex ones
+1. Linear SVM is highly effective on high-dimensional sparse text data (TF-IDF vectors)
+2. It achieves the best recall (72.83%) — meaning it catches the most scams while keeping precision at 96.18%
+3. Like Logistic Regression, Linear SVM has a `coef_` vector, so we still get full **explainability** (we can show _which words_ caused the flag)
+4. The linear kernel makes it computationally efficient — no expensive kernel trick needed
 
 ---
 
@@ -282,7 +283,7 @@ This is the most important part for user trust.
 
 **Step 1: Feature Contributions**
 
-Remember that TF-IDF converts text into 5000 numbers? And Logistic Regression has 5000 corresponding "weights" (coefficients)?
+Remember that TF-IDF converts text into 5000 numbers? And linear models (like our SVM or Logistic Regression) have 5000 corresponding "weights" (coefficients)?
 
 ```
 For each word in the job posting:
@@ -609,7 +610,7 @@ The model is trained on a dedicated CSV dataset containing structured salary rec
 | `EducationLevel`  | string | "Bachelors"         |
 | `Industry`        | string | "Technology"        |
 | `Location`        | string | "Remote"            |
-| `Salary`          | float  | 85000.0             |
+| `Salary(INR)`     | float  | 85000.0             |
 
 ---
 
@@ -617,40 +618,35 @@ The model is trained on a dedicated CSV dataset containing structured salary rec
 
 ### The Core Idea
 
-Scam jobs often lure victims with _unrealistically high salaries_. We detect this **two ways**: (1) comparing against hardcoded market benchmarks, and (2) comparing against the RF model's prediction.
+Scam jobs often lure victims with _unrealistically high salaries_. We detect this by comparing the posted salary against the **ML model's predicted salary** for that role, experience level, and industry.
 
 ### How It Works
 
-**Step 1:** Detect what role the job is for (keywords like "software engineer", "intern", "data scientist")
+**Step 1:** Extract features from the job text — position, experience level, education, industry, location (using keyword matching)
 
 **Step 2:** Detect the currency ($ = USD, ₹ = INR, "LPA" = Indian format)
 
 **Step 3:** Parse the salary into numbers ("$55,000-$100,000" → min=55000, max=100000)
 
-**Step 4:** Compare against benchmarks:
+**Step 4:** Get the ML prediction — the Random Forest Regressor predicts the expected salary in INR (converted to USD if needed, at ~₹83/USD)
 
-| Check                      | Anomaly Score | Why                                                      |
-| -------------------------- | ------------- | -------------------------------------------------------- |
-| Salary > 2× market max     | +0.50         | Almost certainly fake ("Earn $400K as junior dev!")      |
-| Salary > 1.5× market max   | +0.30         | Suspiciously high                                        |
-| Salary > market max        | +0.10         | Above average but possible                               |
-| Salary < 0.5× market min   | +0.20         | May be exploitative/unpaid                               |
-| Very wide range            | +0.20         | "Salary: $20K-$200K" is vague and suspicious             |
-| Suspiciously round numbers | +0.05         | "$100,000 exactly" is more common in fake postings       |
-| No salary provided         | +0.30         | Slightly suspicious (legit jobs usually disclose ranges) |
+**Step 5:** Compare posted salary against the ML prediction:
+
+| Check                               | Anomaly Score | Why                                                          |
+| ----------------------------------- | ------------- | ------------------------------------------------------------ |
+| Salary > 2.5× ML prediction         | +0.60         | Strong scam indicator ("Earn $400K as junior dev!")          |
+| Salary > 1.8× ML prediction         | +0.40         | Significantly above expected market rate                     |
+| Salary < 0.4× ML prediction         | +0.30         | Unusually low — may be exploitative                          |
+| Deviation > 50% from prediction     | +0.20         | Unusual deviation from expected range                        |
+| Very wide salary range               | +0.20         | "Salary: $20K-$200K" is vague and suspicious                |
+| Suspiciously round numbers           | +0.05         | "$100,000 exactly" is more common in fake postings           |
+| No salary provided                   | +0.30         | Slightly suspicious (legit jobs usually disclose ranges)     |
+
+Score is capped at 1.0.
 
 ### Why Both USD and INR?
 
-Because this is an Indian project. Many Indian job scams quote salaries in LPA (Lakhs Per Annum) or ₹ format. Supporting both currencies makes the tool useful for the actual target audience.
-
-### Benchmarks Example
-
-```
-Software Engineer (USD): $50K - $200K (avg $110K)
-Software Engineer (INR): ₹3L - ₹30L (avg ₹8L)
-Intern (USD): $10K - $50K (avg $25K)
-Intern (INR): ₹50K - ₹3L (avg ₹1.5L)
-```
+Because this is an Indian project. Many Indian job scams quote salaries in LPA (Lakhs Per Annum) or ₹ format. The ML model predicts in INR and automatically converts to USD when comparing against dollar-denominated postings.
 
 ---
 
