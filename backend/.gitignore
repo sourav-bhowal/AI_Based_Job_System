@@ -2,4 +2,5 @@
 /.vscode
 /datasets
 /models
+/scam_detector.db
 /__pycache__
