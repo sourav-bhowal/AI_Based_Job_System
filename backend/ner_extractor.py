@@ -18,7 +18,6 @@ Entity types used:
 
 import spacy
 import re
-from typing import Optional
 
 # Lazy-loaded spaCy model
 _nlp = None

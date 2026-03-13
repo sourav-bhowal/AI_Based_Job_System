@@ -1,4 +1,4 @@
-# AI Job Scam Detector — API Documentation
+# AI Job Analysis and Detection System — API Documentation
 
 **Base URL:** `http://localhost:8000`  
 **Version:** `2.0.0`  

@@ -1,4 +1,4 @@
-# AI Job Scam Detector — Technical ML Report
+# AI Job Analysis and Detection System — Technical ML Report
 
 ## Abstract
 

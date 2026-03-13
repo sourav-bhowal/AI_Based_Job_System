@@ -1,7 +1,6 @@
 """Community scam reporting system."""
 
 from database import get_db
-from datetime import datetime
 
 
 def create_report(user_id: int, company_name: str, description: str,

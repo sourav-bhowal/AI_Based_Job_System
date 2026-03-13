@@ -1,5 +1,4 @@
 import whois
-import requests
 import re
 from datetime import datetime
 from database import get_db

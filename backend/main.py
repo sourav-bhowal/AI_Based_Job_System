@@ -1,9 +1,9 @@
 """
-AI Job Scam Detector — FastAPI Backend
+AI Job Analysis and Detection System — FastAPI Backend
 =====================================
 
 Full-featured backend with:
-- Job scam analysis with explainable AI
+- Job analysis and detection with explainable AI
 - Resume parsing and job matching
 - Company reputation scoring
 - Community scam reporting
@@ -11,6 +11,9 @@ Full-featured backend with:
 - PDF report generation
 - JWT authentication
 """
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +23,7 @@ from typing import Optional
 import json
 
 # Local modules
-from database import get_db, init_db
+from database import get_db
 from auth import (
     register_user, login_user, get_current_user, get_optional_user
 )
@@ -42,7 +45,7 @@ from ai_text_detector import detect_ai_text
 
 # ========== App Setup ==========
 app = FastAPI(
-    title="AI Job Scam Detector",
+    title="AI Job Analysis and Detection System",
     description="AI-powered job posting analysis with explainable ML, resume matching, and community reporting",
     version="2.0.0",
 )
@@ -50,10 +53,10 @@ app = FastAPI(
 # CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -61,7 +64,7 @@ app.add_middleware(
 
 class RegisterRequest(BaseModel):
     username: str
-    email: str
+    email: EmailStr
     password: str
     full_name: Optional[str] = None
 
@@ -91,7 +94,7 @@ class VoteRequest(BaseModel):
 class CompanyCheckRequest(BaseModel):
     company_name: str
     domain: Optional[str] = None
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
 
 class MatchJobRequest(BaseModel):
     resume_id: int
@@ -230,9 +233,6 @@ def detect_ai_generated(req: TextAnalyzeRequest):
 async def upload_resume(file: UploadFile = File(...), user=Depends(get_current_user)):
     """Upload and parse a resume (PDF, DOCX, or TXT)."""
     # Validate file type
-    allowed = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-               "text/plain"]
-    
     ext = file.filename.lower().split(".")[-1]
     if ext not in ["pdf", "docx", "doc", "txt"]:
         raise HTTPException(400, "Unsupported file type. Upload PDF, DOCX, or TXT.")

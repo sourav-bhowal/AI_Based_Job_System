@@ -1,4 +1,4 @@
-# AI Job Scam Detector — How Everything Works (Presentation Guide)
+# AI Job Analysis and Detection System — How Everything Works (Presentation Guide)
 
 > Written for **web developers** — no AI/ML background needed.
 > This explains _why_ every decision was made, _how_ each piece works, and _what_ every concept means.

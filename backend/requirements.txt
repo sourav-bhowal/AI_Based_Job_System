@@ -8,7 +8,6 @@ requests
 python-whois
 tldextract
 joblib
-tqdm
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
@@ -17,3 +16,4 @@ python-docx
 fpdf2
 spacy
 pydantic[email]
+python-dotenv

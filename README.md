@@ -1,4 +1,4 @@
-# AI Job Scam Detector — Technical Documentation
+# AI Job Analysis and Detection System — Technical Documentation
 
 > **Version 2.0.0** | A full-stack AI-powered platform for detecting fraudulent job postings, analyzing resumes, and building a community-driven scam reporting ecosystem.
 

@@ -1,6 +1,5 @@
 import sqlite3
 import os
-from datetime import datetime
 
 # Database path
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scam_detector.db")

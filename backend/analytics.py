@@ -3,7 +3,7 @@
 import json
 import os
 from database import get_db
-from datetime import datetime, timedelta
+from datetime import datetime
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
