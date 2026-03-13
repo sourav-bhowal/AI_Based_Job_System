@@ -2,7 +2,7 @@ import sqlite3
 import os
 
 # Database path
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scam_detector.db")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "database", "scam_detector.db")
 
 
 def get_db():

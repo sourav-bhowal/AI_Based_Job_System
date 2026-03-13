@@ -157,7 +157,7 @@ def train_all_models():
     joblib.dump({name: m for name, m in models.items()}, all_models_path)
 
     # Save metrics to JSON
-    metrics_path = os.path.join(SCRIPT_DIR, "model_metrics.json")
+    metrics_path = os.path.join(SCRIPT_DIR, "models", "model_metrics.json")
     metrics_data = {
         "best_model": best_model_name,
         "models": results,
