@@ -94,15 +94,17 @@ The model's prediction serves as the "expected salary" baseline. Anomaly scoring
 
 ## 5. Named Entity Recognition — Transfer Learning
 
-Entity extraction leverages **spaCy's `en_core_web_sm`** pre-trained pipeline — a CNN-based NER model trained on OntoNotes 5.0 (1,745K tokens). The model recognizes 18 entity types; we utilize 5 for job scam analysis:
+Entity extraction leverages **spaCy's `en_core_web_sm`** pre-trained pipeline — a CNN-based NER model trained on OntoNotes 5.0 (1,745K tokens). The model recognizes 18 entity types; we utilize 7 for job scam analysis:
 
-| Entity Type         | Label  | Application                                    |
-| ------------------- | ------ | ---------------------------------------------- |
-| Organization        | ORG    | Company name extraction, legitimacy validation |
-| Geopolitical Entity | GPE    | Location extraction, "no location" scam signal |
-| Monetary Value      | MONEY  | Salary entity detection                        |
-| Person              | PERSON | Resume candidate name extraction               |
-| Date                | DATE   | Timeline extraction from resumes               |
+| Entity Type         | Label   | Application                                                   |
+| ------------------- | ------- | ------------------------------------------------------------- |
+| Organization        | ORG     | Company name extraction, legitimacy validation                |
+| Geopolitical Entity | GPE     | City/country extraction, "no location" scam signal            |
+| Location            | LOC     | Non-GPE locations (regions, landmarks) — combined with GPE    |
+| Monetary Value      | MONEY   | Salary entity detection, high-value scam signal               |
+| Person              | PERSON  | Resume candidate name extraction, excessive-names scam signal |
+| Date                | DATE    | Timeline extraction from resumes (employment periods)         |
+| Product             | PRODUCT | Technology/product name extraction from resumes               |
 
 NER outputs are integrated into 4 downstream modules: scraping (entity enrichment), explanation (entity-based scam signals), resume parsing (contact/employer extraction), and company scoring (ORG entity validation adding +10 to trust heuristic).
 

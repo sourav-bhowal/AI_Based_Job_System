@@ -32,7 +32,7 @@
 
 ## Project Overview
 
-The AI Job Scam Detector is a **FastAPI-based backend** that combines multiple machine learning models, natural language processing, web scraping, and community-driven insights to help users identify fraudulent job postings. It provides:
+The AI Job Analysis and Detection System is a **FastAPI-based backend** that combines multiple machine learning models, natural language processing, web scraping, and community-driven insights to help users identify fraudulent job postings. It provides:
 
 - **Multi-model ML scam detection** (5 classifiers compared and best selected)
 - **AI-generated text detection** — catches ChatGPT-written fake job postings using a Random Forest Classifier trained on a 1GB dataset of Human vs. AI text
@@ -93,9 +93,11 @@ The AI Job Scam Detector is a **FastAPI-based backend** that combines multiple m
 ```
 ai-job-scam-detector/
 ├── README.md                        # This file
-├── API_DOCS.md                      # API endpoint documentation
-├── HOW_IT_WORKS.md                  # High-level system overview
-├── TECHNICAL_ML_REPORT.md           # ML model evaluation report
+│
+├── docs/                            # Project documentation
+│   ├── API_DOCS.md                  #   API endpoint documentation
+│   ├── HOW_IT_WORKS.md              #   High-level system overview
+│   └── TECHNICAL_ML_REPORT.md       #   ML model evaluation report
 │
 ├── backend/
 │   ├── main.py                      # FastAPI app — all routes and endpoint definitions
@@ -116,12 +118,12 @@ ai-job-scam-detector/
 │   ├── analytics.py                 # Dashboard statistics, trends, model comparison
 │   ├── report_generator.py          # PDF report generation (scan & match reports)
 │   ├── requirements.txt             # Python dependencies
-│   ├── model_metrics.json           # All 5 model metrics + best model info
-│   ├── scam_detector.db             # SQLite runtime database (auto-created)
+│   │
+│   ├── database/                         # SQLite runtime database (auto-created)
+│   │   └── scam_detector.db              #   Main application database
 │   │
 │   ├── datasets/                         # Training datasets
 │   │   ├── fake_job_postings.csv         #   Job scam detection (~50 MB, 17,880 rows)
-│   │   ├── Fake Postings.csv             #   Alternate/smaller dataset (~3 MB, 1,000 rows)
 │   │   ├── AI_Human.csv                  #   AI text detection (~1.06 GB, ~500K rows)
 │   │   └── synthetic_salary_dataset.csv  #   Salary prediction (~28 KB, ~500 rows)
 │   │
@@ -131,7 +133,8 @@ ai-job-scam-detector/
 │   │   ├── all_models.pkl                    #   All 5 trained classifiers (~5.7 MB)
 │   │   ├── ai_detector_model.pkl             #   AI text detection classifier (~30.8 MB)
 │   │   ├── ai_detector_vectorizer.pkl        #   TF-IDF vectorizer for AI detection (~190 KB)
-│   │   └── salary_model.pkl                  #   RF salary regressor pipeline (~1.9 MB)
+│   │   ├── salary_model.pkl                  #   RF salary regressor pipeline (~1.9 MB)
+│   │   └── model_metrics.json                #   All 5 model metrics + best model info
 │   │
 │   └── reports/                              # Generated PDF reports output directory
 │
@@ -153,7 +156,7 @@ ai-job-scam-detector/
 
 ## Database Schema — How Data is Stored
 
-The application uses a **single SQLite database** file (`scam_detector.db`) located in the `backend/` directory. It is initialized automatically on import via `init_db()` in `database.py`. Foreign keys are enforced via `PRAGMA foreign_keys = ON`.
+The application uses a **single SQLite database** file (`scam_detector.db`) located in the `backend/database/` directory. It is initialized automatically on import via `init_db()` in `database.py`. Foreign keys are enforced via `PRAGMA foreign_keys = ON`.
 
 ### Table 1: `users`
 
@@ -322,7 +325,7 @@ users (1) ──── (N) scan_history
   │
   ├──── (N) scam_reports (1) ──── (N) report_votes
   │                                         │
-  └──────────────────────────────────────────┘
+  └─────────────────────────────────────────┘
                                     (user can vote on reports)
 
 scam_reports ──── auto-populates ──── company_blacklist (≥3 reports)
@@ -523,7 +526,7 @@ Input text
 │ Analysis               │
 │                        │
 │ contribution[i] =      │
-│   coef[i] × tfidf[i]  │
+│   coef[i] × tfidf[i]   │
 │                        │
 │ Sort by |contribution| │
 │ Split into:            │
@@ -1091,11 +1094,11 @@ Paginated query with optional `category` filter. Joins with `users` table for us
 | `get_overview_stats()`              | All tables                                    | total_users, total_scans, total_reports, total_resumes, blacklisted_companies, average_risk_score, scans_today, risk_distribution |
 | `get_scan_trends(days)`             | `scan_history`                                | Daily scan counts and average risk scores for last N days                                                                         |
 | `get_top_reported_companies(limit)` | `scam_reports`                                | Company names, report counts, upvotes (grouped case-insensitive)                                                                  |
-| `get_model_comparison()`            | `model_metrics.json` or `model_metrics` table | All 5 model metrics (accuracy, precision, recall, F1)                                                                             |
+| `get_model_comparison()`            | `models/model_metrics.json` or `model_metrics` table | All 5 model metrics (accuracy, precision, recall, F1)                                                                        |
 | `get_recent_scans(limit)`           | `scan_history` JOIN `users`                   | Latest scan records with username                                                                                                 |
 | `get_report_categories()`           | `scam_reports`                                | Category distribution (count per category)                                                                                        |
 
-**Data retrieval priority for model metrics:** JSON file first (`model_metrics.json`), database fallback.
+**Data retrieval priority for model metrics:** JSON file first (`models/model_metrics.json`), database fallback.
 
 ---
 
@@ -1252,8 +1255,8 @@ Triggered by `POST /api/reports/generate-match-pdf`. Sections:
 
 | File                 | Size    | Format   | Description                                              |
 | -------------------- | ------- | -------- | -------------------------------------------------------- |
-| `scam_detector.db`   | Dynamic | SQLite 3 | Runtime database (all 8 tables, auto-created on startup) |
-| `model_metrics.json` | Dynamic | JSON     | All 5 model metrics + best model info + dataset metadata |
+| `database/scam_detector.db`   | Dynamic | SQLite 3 | Runtime database (all 8 tables, auto-created on startup) |
+| `models/model_metrics.json`   | Dynamic | JSON     | All 5 model metrics + best model info + dataset metadata |
 
 ---
 
@@ -1339,7 +1342,7 @@ This generates:
 - `models/all_models.pkl` — all 5 classifiers for comparison
 - `models/salary_model.pkl` — salary regressor pipeline
 - `models/ai_detector_model.pkl` + `models/ai_detector_vectorizer.pkl` — AI text detector
-- `model_metrics.json` — training metrics for all models
+- `models/model_metrics.json` — training metrics for all models
 
 > **Note:** The AI text detector model will auto-train on first API call if models are not found, provided the `AI_Human.csv` dataset is present in `datasets/`. Training samples 40K records from the ~500K dataset to avoid memory issues.
 
@@ -1372,9 +1375,9 @@ The frontend will be available at `http://localhost:3000`.
 
 | File                    | Description                                       |
 | ----------------------- | ------------------------------------------------- |
-| `API_DOCS.md`           | Detailed API endpoint reference                   |
-| `HOW_IT_WORKS.md`       | High-level system overview and feature walkthrough |
-| `TECHNICAL_ML_REPORT.md`| ML model evaluation and performance analysis      |
+| `docs/API_DOCS.md`           | Detailed API endpoint reference                   |
+| `docs/HOW_IT_WORKS.md`       | High-level system overview and feature walkthrough |
+| `docs/TECHNICAL_ML_REPORT.md`| ML model evaluation and performance analysis      |
 
 ---
 

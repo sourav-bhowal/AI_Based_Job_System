@@ -33,7 +33,7 @@
 
 Imagine you're a job seeker. You find a job posting online. How do you know if it's real or a scam?
 
-**Our system answers this question using 6 layers of analysis:**
+**Our system answers this question using 7 layers of analysis:**
 
 ```
   Job Posting URL / Text
