@@ -1,0 +1,108 @@
+{
+  "best_model": "SVM (Linear)",
+  "models": [
+    {
+      "model_name": "Logistic Regression",
+      "accuracy": 97.4,
+      "precision": 100.0,
+      "recall": 46.24,
+      "f1_score": 63.24,
+      "confusion_matrix": [
+        [
+          3403,
+          0
+        ],
+        [
+          93,
+          80
+        ]
+      ],
+      "training_samples": 14304,
+      "test_samples": 3576,
+      "trained_at": "2026-03-14T03:45:08.676059"
+    },
+    {
+      "model_name": "Random Forest",
+      "accuracy": 97.99,
+      "precision": 100.0,
+      "recall": 58.38,
+      "f1_score": 73.72,
+      "confusion_matrix": [
+        [
+          3403,
+          0
+        ],
+        [
+          72,
+          101
+        ]
+      ],
+      "training_samples": 14304,
+      "test_samples": 3576,
+      "trained_at": "2026-03-14T03:45:11.395846"
+    },
+    {
+      "model_name": "SVM (Linear)",
+      "accuracy": 98.55,
+      "precision": 96.18,
+      "recall": 72.83,
+      "f1_score": 82.89,
+      "confusion_matrix": [
+        [
+          3398,
+          5
+        ],
+        [
+          47,
+          126
+        ]
+      ],
+      "training_samples": 14304,
+      "test_samples": 3576,
+      "trained_at": "2026-03-14T03:45:11.594959"
+    },
+    {
+      "model_name": "Naive Bayes",
+      "accuracy": 96.98,
+      "precision": 88.24,
+      "recall": 43.35,
+      "f1_score": 58.14,
+      "confusion_matrix": [
+        [
+          3393,
+          10
+        ],
+        [
+          98,
+          75
+        ]
+      ],
+      "training_samples": 14304,
+      "test_samples": 3576,
+      "trained_at": "2026-03-14T03:45:11.621921"
+    },
+    {
+      "model_name": "Gradient Boosting",
+      "accuracy": 97.79,
+      "precision": 91.96,
+      "recall": 59.54,
+      "f1_score": 72.28,
+      "confusion_matrix": [
+        [
+          3394,
+          9
+        ],
+        [
+          70,
+          103
+        ]
+      ],
+      "training_samples": 14304,
+      "test_samples": 3576,
+      "trained_at": "2026-03-14T03:46:10.718641"
+    }
+  ],
+  "vectorizer_features": 5000,
+  "dataset_size": 17880,
+  "trained_at": "2026-03-14T03:46:10.796664"
+}
