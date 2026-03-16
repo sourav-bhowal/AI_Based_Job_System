@@ -18,6 +18,7 @@ fpdf2
 pydantic[email]
 python-dotenv
 torch
+# torch==2.10.0+cu128 # With CUDA 12.8 support
 transformers
 sentence-transformers
 accelerate>=1.1.0
