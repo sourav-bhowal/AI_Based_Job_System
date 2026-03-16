@@ -1,13 +1,8 @@
-import requests
 from bs4 import BeautifulSoup
 import re
 from urllib.parse import urlparse
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 from ner_extractor import extract_job_entities
-
-try:
-    import cloudscraper
-except ImportError:
-    cloudscraper = None
 
 
 REQUEST_HEADERS = {
@@ -18,7 +13,6 @@ REQUEST_HEADERS = {
     "Pragma": "no-cache",
     "Upgrade-Insecure-Requests": "1",
 }
-
 
 def validate_job_url(url: str) -> str:
     """Validate and normalize a job URL."""
@@ -34,66 +28,80 @@ def validate_job_url(url: str) -> str:
 
 
 def _fetch_url(url: str):
-    """Fetch a URL using progressively stronger scraping strategies."""
-    errors = []
-
+    """Fetch page HTML using Playwright only."""
     try:
-        response = requests.get(url, timeout=15, headers=REQUEST_HEADERS, allow_redirects=True)
-        response.raise_for_status()
-        return response
-    except requests.HTTPError as exc:
-        status_code = exc.response.status_code if exc.response is not None else None
-        errors.append(f"requests HTTP {status_code}" if status_code else "requests HTTP error")
-    except requests.RequestException:
-        errors.append("requests network error")
-
-    if cloudscraper is not None:
-        try:
-            scraper = cloudscraper.create_scraper(
-                browser={"browser": "chrome", "platform": "windows", "mobile": False}
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent=REQUEST_HEADERS["User-Agent"],
+                locale="en-US",
+                extra_http_headers={
+                    "Accept": REQUEST_HEADERS["Accept"],
+                    "Accept-Language": REQUEST_HEADERS["Accept-Language"],
+                    "Cache-Control": REQUEST_HEADERS["Cache-Control"],
+                    "Pragma": REQUEST_HEADERS["Pragma"],
+                },
             )
-            response = scraper.get(url, timeout=20, headers=REQUEST_HEADERS, allow_redirects=True)
-            response.raise_for_status()
-            return response
-        except requests.HTTPError as exc:
-            status_code = exc.response.status_code if exc.response is not None else None
-            errors.append(f"cloudscraper HTTP {status_code}" if status_code else "cloudscraper HTTP error")
-        except requests.RequestException:
-            errors.append("cloudscraper network error")
+            page = context.new_page()
+            page.goto(url, wait_until="networkidle", timeout=35000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except PlaywrightTimeoutError:
+                pass
 
-    error_summary = ", ".join(errors) if errors else "unknown fetch error"
-    if "403" in error_summary:
-        raise RuntimeError(
-            "The target site blocked automated access (403 Forbidden). "
-            "Try /api/scan/text with the job description text for this listing."
-        )
+            html = page.content()
+            context.close()
+            browser.close()
 
-    raise RuntimeError(f"Unable to fetch the provided URL: {error_summary}")
+            if not html or not html.strip():
+                raise RuntimeError("Playwright loaded the page but no HTML content was returned")
+            return html
+    except PlaywrightTimeoutError as exc:
+        raise RuntimeError(f"Playwright timed out while loading the URL: {exc}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"Unable to fetch the provided URL with Playwright: {exc}") from exc
+
+
+def _normalize_text(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "")).strip()
+
+
+def extract_job_description(soup: BeautifulSoup) -> str:
+    """Extract full rendered body text from the page."""
+
+    for script_like in soup(["script", "style", "noscript"]):
+        script_like.decompose()
+
+    body_text = _normalize_text(soup.get_text(separator=" "))
+    if len(body_text) <= 120:
+        return ""
+
+    return body_text
 
 # Scrape job details from a given URL
 def scrape_job(url: str):
     url = validate_job_url(url)
 
-    # Make a GET request to the URL
-    res = _fetch_url(url)
+    # Fetch rendered HTML with Playwright
+    html = _fetch_url(url)
 
     # Parse the HTML content using BeautifulSoup
-    soup = BeautifulSoup(res.text, "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
 
     # Extract the text content from the page
-    text = re.sub(r"\s+", " ", soup.get_text(separator=" ")).strip()
+    text = extract_job_description(soup)
     if not text:
         raise RuntimeError("The provided page does not contain readable text content")
 
     # NER entity extraction
     try:
-        entities = extract_job_entities(text[:5000])
+        entities = extract_job_entities(text)
     except Exception:
         entities = {"companies": [], "locations": [], "money": [], "dates": [], "persons": [], "entity_count": 0, "all_entities": {}, "scam_signals": []}
 
     # Return a dictionary with the job description, salary, email, and NER entities
     return {
-        "description": text[:5000],  # truncate
+        "description": text,
         "salary": extract_salary(text),
         "email": extract_email(text),
         "entities": entities,

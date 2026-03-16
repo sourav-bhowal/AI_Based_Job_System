@@ -4,8 +4,7 @@ scikit-learn
 pandas
 numpy
 beautifulsoup4
-requests
-cloudscraper
+playwright
 python-whois
 tldextract
 joblib
