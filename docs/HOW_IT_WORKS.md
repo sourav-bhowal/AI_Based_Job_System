@@ -374,6 +374,24 @@ Our previous version used rule-based linguistic features (like checking average 
 
 Like training a spam filter on thousands of known spam vs real emails, instead of trying to manually write regex rules for every possible spam phrase.
 
+### Option B: BERT/RoBERTa Transformer Upgrade (`ai_text_detector_bert.py`)
+
+An alternative deep learning version is also available using a pretrained **RoBERTa transformer** model (`openai-community/roberta-base-openai-detector`). This is significantly more accurate on modern LLM-generated text because:
+
+- **Contextual understanding:** TF-IDF treats words as independent; BERT/RoBERTa understands how words relate to each other in context.
+- **Pretrained knowledge:** RoBERTa was trained on millions of documents and then specifically fine-tuned for AI text detection.
+- **Fine-tunable:** You can further fine-tune it on the local `AI_Human.csv` dataset for even better accuracy on your specific domain.
+
+**How to switch:** Change the import in `main.py` and `explainer.py`:
+
+```python
+from ai_text_detector_bert import detect_ai_text  # instead of ai_text_detector
+```
+
+**Tradeoff:** The BERT model is ~500 MB (vs ~31 MB for Random Forest) and inference is slower on CPU. But accuracy on modern AI-generated text is substantially higher.
+
+Both options return the exact same response format, so the rest of the system works identically regardless of which you choose.
+
 ---
 
 ## Named Entity Recognition (NER) — Why & How
@@ -544,6 +562,36 @@ Skill Match Ratio = 2/5 = 40%
 ```
 match_score = (0.4 × cosine_similarity + 0.6 × skill_match_ratio) × 100
 ```
+
+### Option B: Sentence-BERT Semantic Matching (`resume_matcher_semantic.py`)
+
+An alternative deep learning version replaces the TF-IDF cosine similarity with **Sentence-BERT embeddings** (model: `all-MiniLM-L6-v2`). Everything else (skill matching, ATS scoring, course recommendations, training roadmap) stays exactly the same.
+
+**Why it's better at similarity:**
+
+```
+TF-IDF (Option A):
+  Resume says: "built REST APIs"
+  Job says:    "backend development experience"
+  → Similarity: ~0.0 (no shared keywords)
+
+Sentence-BERT (Option B):
+  Resume says: "built REST APIs"
+  Job says:    "backend development experience"
+  → Similarity: ~0.74 (understands they're semantically related)
+```
+
+Sentence-BERT converts entire sentences into dense vectors that capture _meaning_, not just word overlap. Two sentences about the same concept get similar vectors even if they use completely different words.
+
+**How to switch:** Change the import in `main.py`:
+
+```python
+from resume_matcher_semantic import compute_match_score  # instead of resume_matcher
+```
+
+**Tradeoff:** The Sentence-BERT model is ~80 MB and slightly slower than TF-IDF. But matching quality is noticeably more accurate for real-world resumes and job postings.
+
+Both options return the exact same response format, so the frontend and database work identically regardless of which you choose.
 
 ---
 

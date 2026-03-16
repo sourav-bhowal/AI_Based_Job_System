@@ -2,7 +2,8 @@ import numpy as np
 import model as scam_model
 import re
 from ner_extractor import extract_job_entities
-from ai_text_detector import detect_ai_text
+from ai_text_detector_bert import detect_ai_text
+# from ai_text_detector import detect_ai_text
 
 
 def explain_prediction(text: str, num_features: int = 10) -> dict:

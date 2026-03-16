@@ -65,6 +65,22 @@ The model outputs probability estimates for both classes (Human vs. AI). Thresho
 
 This pure ML approach replaces previous statistical stylometry heuristics, providing much higher accuracy (>96%) on modern LLM outputs by extracting thousands of deep semantic features rather than a handful of surface-level text statistics.
 
+### 3.1 Alternative: RoBERTa Transformer Classifier (`ai_text_detector_bert.py`)
+
+An optional deep learning upgrade is available using **`openai-community/roberta-base-openai-detector`**, a RoBERTa-base model fine-tuned by OpenAI for detecting machine-generated text. The system supports both approaches:
+
+| Property              | Option A: Random Forest + TF-IDF        | Option B: RoBERTa Transformer               |
+| --------------------- | ---------------------------------------- | -------------------------------------------- |
+| **Module**            | `ai_text_detector.py`                    | `ai_text_detector_bert.py`                   |
+| **Architecture**      | TF-IDF (5K features) → RF (100 trees)   | RoBERTa-base (12 layers, 768-dim, 125M params) |
+| **Model size**        | ~31 MB                                   | ~500 MB                                      |
+| **Inference**         | <50ms on CPU                             | ~200–500ms on CPU, ~30ms on GPU              |
+| **Context window**    | Bag-of-words (no word order)             | 512 tokens with full bidirectional context   |
+| **Fine-tuning**       | Trains on `AI_Human.csv` (40K samples)   | Optional fine-tune on `AI_Human.csv` (10K+ samples) |
+| **Fallback**          | —                                        | Falls back to Option A if PyTorch unavailable |
+
+The transformer approach captures contextual patterns (sentence coherence, stylistic consistency) that TF-IDF cannot represent. Both return identical response schemas (`ai_probability`, `human_probability`, `verdict`, `confidence`, `method`), enabling seamless switching via import change.
+
 ---
 
 ## 4. Salary Anomaly Detection — Random Forest Pipeline
@@ -117,6 +133,21 @@ Document similarity is computed using **cosine similarity** on TF-IDF vectors (3
 A secondary **set-intersection metric** computes exact skill overlap ratio using a curated taxonomy of 200+ skills across 7 categories, matched via regex word-boundary patterns (`\b{skill}\b`).
 
 Final match score blends both signals: `0.4 × cosine_similarity + 0.6 × skill_match_ratio`.
+
+### 6.1 Alternative: Sentence-BERT Semantic Similarity (`resume_matcher_semantic.py`)
+
+An optional deep learning upgrade replaces the TF-IDF cosine similarity component with **Sentence-BERT** embeddings (model: `all-MiniLM-L6-v2`, 384-dimensional dense vectors). The skill-matching, ATS scoring, course recommendation, and training roadmap logic remain identical.
+
+| Property              | Option A: TF-IDF Cosine                  | Option B: Sentence-BERT                      |
+| --------------------- | ---------------------------------------- | -------------------------------------------- |
+| **Module**            | `resume_matcher.py`                      | `resume_matcher_semantic.py`                 |
+| **Similarity method** | Sparse TF-IDF vectors (3K features)      | Dense Sentence-BERT embeddings (384-dim)     |
+| **Model size**        | No model file (built on-the-fly)         | ~80 MB (downloaded once, cached)             |
+| **Semantic matching** | Keyword overlap only                     | Full semantic understanding                  |
+| **Inference**         | <10ms                                    | ~50–100ms on CPU                             |
+| **Fallback**          | —                                        | Falls back to TF-IDF if sentence-transformers unavailable |
+
+The key advantage is semantic generalization: TF-IDF assigns zero similarity to "built REST APIs" vs. "backend development experience" (no shared tokens), while Sentence-BERT produces ~0.74 similarity by encoding meaning. Both return identical response schemas, enabling seamless switching via import change.
 
 ---
 

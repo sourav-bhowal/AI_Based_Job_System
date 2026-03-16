@@ -302,6 +302,11 @@ Detect if job posting text was AI-generated (e.g., ChatGPT).
 
 > [!NOTE]
 > `verdict` values: `"likely_human"` (prob < 0.40), `"uncertain"` (0.40–0.64), `"likely_ai"` (≥ 0.65)
+>
+> `method` values depend on which module is configured:
+> - `"pure_ml_classifier"` — default (TF-IDF + Random Forest via `ai_text_detector.py`)
+> - `"bert_transformer"` — BERT/RoBERTa upgrade (via `ai_text_detector_bert.py`)
+> - `"fallback_tfidf"` — BERT module is active but fell back to TF-IDF due to missing PyTorch
 
 **Error Responses:**
 
@@ -381,6 +386,12 @@ Match a previously uploaded resume against a job posting. Returns detailed skill
 
 > [!IMPORTANT]
 > You must provide either `job_url` or `job_text`. If both are provided, `job_url` takes priority.
+>
+> The similarity computation method depends on which module is configured:
+> - **Default** (`resume_matcher.py`): TF-IDF cosine similarity
+> - **Upgrade** (`resume_matcher_semantic.py`): Sentence-BERT semantic embeddings
+>
+> When using the Sentence-BERT option, the response includes an additional `"similarity_method": "sentence_bert"` field.
 
 **Success Response `200`:**
 

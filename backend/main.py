@@ -32,7 +32,8 @@ from risk_engine import compute_risk
 from model import predict_scam
 from explainer import explain_prediction
 from resume_parser import parse_resume
-from resume_matcher import compute_match_score
+from resume_matcher_semantic import compute_match_score
+# from resume_matcher import compute_match_score
 from salary_predictor import predict_salary_anomaly
 from company_scorer import compute_company_trust_score
 from community import create_report, get_reports, vote_report, get_blacklist
@@ -41,7 +42,8 @@ from analytics import (
     get_model_comparison, get_recent_scans, get_report_categories
 )
 from report_generator import generate_scan_report, generate_resume_match_report
-from ai_text_detector import detect_ai_text
+from ai_text_detector_bert import detect_ai_text
+# from ai_text_detector import detect_ai_text
 
 # ========== App Setup ==========
 app = FastAPI(

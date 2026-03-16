@@ -35,11 +35,11 @@
 The AI Job Analysis and Detection System is a **FastAPI-based backend** that combines multiple machine learning models, natural language processing, web scraping, and community-driven insights to help users identify fraudulent job postings. It provides:
 
 - **Multi-model ML scam detection** (5 classifiers compared and best selected)
-- **AI-generated text detection** — catches ChatGPT-written fake job postings using a Random Forest Classifier trained on a 1GB dataset of Human vs. AI text
+- **AI-generated text detection** — catches ChatGPT-written fake job postings (two options: TF-IDF + Random Forest, or BERT/RoBERTa transformer for higher accuracy)
 - **Explainable AI** — shows _why_ a posting was flagged, word-by-word
-- **Named Entity Recognition (NER)** — spaCy-powered entity extraction for job postings and resumes
+- **Named Entity Recognition (NER)** — BERT transformer-powered entity extraction for job postings and resumes (`dslim/bert-base-NER`)
 - **Resume parsing** with skill extraction across 7 categories + NER entities
-- **Resume-to-job matching** with ATS score and training roadmap
+- **Resume-to-job matching** with ATS score and training roadmap (two options: TF-IDF cosine similarity, or Sentence-BERT semantic matching)
 - **ML salary anomaly detection** — Random Forest Regressor Pipeline trained on dataset features (Position, Experience, Education, Industry, Location)
 - **Company reputation scoring** from 4 weighted signals + NER validation
 - **Community scam reporting** with voting and auto-blacklisting
@@ -58,9 +58,11 @@ The AI Job Analysis and Detection System is a **FastAPI-based backend** that com
 | **ASGI Server**         | Uvicorn                                                                               |
 | **Database**            | SQLite 3 (file-based, `scam_detector.db`)                                             |
 | **ML / NLP**            | scikit-learn, TF-IDF Vectorization, Random Forest, SVM, Logistic Regression, Gradient Boosting, Naive Bayes |
-| **AI Text Detection**   | Random Forest Classifier trained on TF-IDF features (1 GB Human vs AI dataset)        |
+| **Deep Learning (Opt.)** | PyTorch, HuggingFace Transformers, Sentence-BERT (`sentence-transformers`) — optional upgrade path |
+| **AI Text Detection**   | **Option A (default):** Random Forest + TF-IDF · **Option B:** RoBERTa transformer via HuggingFace |
+| **Resume-Job Matching** | **Option A (default):** TF-IDF cosine similarity · **Option B:** Sentence-BERT semantic embeddings |
 | **Salary Prediction**   | Random Forest Regressor Pipeline (trained on synthetic salary dataset)                 |
-| **NER**                 | spaCy (`en_core_web_sm` pipeline)                                                     |
+| **NER**                 | BERT transformer (`dslim/bert-base-NER` via HuggingFace, ~92% F1)                     |
 | **Web Scraping**        | Playwright (Chromium), BeautifulSoup4                                                 |
 | **Domain Analysis**     | python-whois                                                                          |
 | **Resume Parsing**      | PyPDF2, python-docx                                                                   |
@@ -103,15 +105,17 @@ ai-job-scam-detector/
 │   ├── main.py                      # FastAPI app — all routes and endpoint definitions
 │   ├── database.py                  # SQLite schema initialization (8 tables)
 │   ├── auth.py                      # JWT authentication (register, login, token decoding)
-│   ├── ai_text_detector.py          # ★ AI-generated text detector (Random Forest classifier)
-│   ├── ner_extractor.py             # ★ NER module — spaCy entity extraction for jobs & resumes
+│   ├── ai_text_detector.py          # ★ AI-generated text detector (Random Forest classifier) [Option A]
+│   ├── ai_text_detector_bert.py     # ★ AI-generated text detector (RoBERTa transformer)     [Option B]
+│   ├── ner_extractor.py             # ★ NER module — BERT transformer entity extraction for jobs & resumes
 │   ├── scraper.py                   # Web scraper — extracts description, salary, email + NER
 │   ├── model.py                     # Model loader — lazy-loads model.pkl and vectorizer.pkl
 │   ├── train_model.py               # Multi-model training pipeline (5 classifiers)
 │   ├── risk_engine.py               # Weighted risk score computation (NLP + salary + domain)
 │   ├── explainer.py                 # Explainable AI — feature contributions, red flags + NER
 │   ├── resume_parser.py             # Resume text extraction, structured parsing + NER
-│   ├── resume_matcher.py            # TF-IDF cosine similarity matching + ATS scoring
+│   ├── resume_matcher.py            # TF-IDF cosine similarity matching + ATS scoring        [Option A]
+│   ├── resume_matcher_semantic.py   # Sentence-BERT semantic matching + ATS scoring           [Option B]
 │   ├── salary_predictor.py          # ★ ML salary prediction (RF Regressor Pipeline)
 │   ├── company_scorer.py            # Company trust scoring (domain, email, social, community)
 │   ├── community.py                 # Scam report CRUD, voting, auto-blacklisting
@@ -134,7 +138,9 @@ ai-job-scam-detector/
 │   │   ├── ai_detector_model.pkl             #   AI text detection classifier (~30.8 MB)
 │   │   ├── ai_detector_vectorizer.pkl        #   TF-IDF vectorizer for AI detection (~190 KB)
 │   │   ├── salary_model.pkl                  #   RF salary regressor pipeline (~1.9 MB)
-│   │   └── model_metrics.json                #   All 5 model metrics + best model info
+│   │   ├── model_metrics.json                #   All 5 model metrics + best model info
+│   │   ├── ai_detector_bert/                 #   (Optional) Fine-tuned RoBERTa model directory
+│   │   └── ner_bert/                        #   (Optional) Fine-tuned BERT NER model directory
 │   │
 │   └── reports/                              # Generated PDF reports output directory
 │
@@ -376,7 +382,7 @@ User submits URL
    - Extracts full text (truncated to 5000 chars)
    - Extracts salary via regex (supports `$`, `₹`, `Rs`, `INR`, `LPA` formats)
    - Extracts email via regex
-   - **Runs NER** via `ner_extractor.extract_job_entities()` → extracts companies (ORG), locations (GPE), monetary values (MONEY), dates, and generates entity-based scam signals
+   - **Runs NER** via `ner_extractor.extract_job_entities()` → extracts companies (ORG), locations (LOC), monetary values (MONEY via regex), dates (via regex), and generates entity-based scam signals
 
 2. **NLP Prediction** (`model.py → predict_scam(text)`):
    - Lazy-loads `model.pkl` (best trained model) and `vectorizer.pkl` (TF-IDF)
@@ -571,12 +577,17 @@ Input text
     ▼
 ┌────────────────────────┐
 │ AI Text Detection      │
-│ (ai_text_detector.py)  │
 │                        │
-│ Random Forest Classi-  │
-│ fier trained on TF-IDF │
-│ vectorization of 1GB   │
-│ Human/AI dataset.      │
+│ Option A (default):    │
+│  ai_text_detector.py   │
+│  Random Forest + TF-IDF│
+│  trained on 1GB dataset│
+│                        │
+│ Option B (DL upgrade): │
+│  ai_text_detector_     │
+│  bert.py               │
+│  RoBERTa transformer   │
+│  via HuggingFace       │
 │                        │
 │ If AI prob > 60%:      │
 │ → add to red_flags     │
@@ -798,14 +809,18 @@ Resume Data (from DB) + Job Text (URL or raw text)
     │
     ▼
 ┌────────────────────────────────┐
-│ Step 1: TF-IDF Cosine          │
-│ Similarity                     │
+│ Step 1: Text Similarity         │
 │                                │
-│ TfidfVectorizer(max_features=  │
-│   3000, stop_words="english")  │
+│ Option A (resume_matcher.py):  │
+│  TF-IDF cosine similarity     │
+│  TfidfVectorizer(3000 feat.)  │
 │                                │
-│ cosine_similarity(resume_vec,  │
-│                   job_vec)     │
+│ Option B (resume_matcher_     │
+│  semantic.py):                 │
+│  Sentence-BERT embeddings     │
+│  Model: all-MiniLM-L6-v2     │
+│  Semantic cosine similarity   │
+│                                │
 │ → similarity ∈ [0.0, 1.0]      │
 └────────────────────────────────┘
     │
@@ -1250,6 +1265,7 @@ Triggered by `POST /api/reports/generate-match-pdf`. Sections:
 | `ai_detector_model.pkl`      | ~30.8 MB | joblib pickle | Random Forest classifier for AI-generated text detection                                |
 | `ai_detector_vectorizer.pkl` | ~190 KB  | joblib pickle | TF-IDF vectorizer for AI text detection (5000 features)                                 |
 | `salary_model.pkl`           | ~1.9 MB  | joblib pickle | Random Forest Regressor pipeline with OneHotEncoder + StandardScaler for salary prediction |
+| `ai_detector_bert/`          | ~500 MB  | HuggingFace   | _(Optional)_ Fine-tuned RoBERTa transformer model for AI text detection (created by `ai_text_detector_bert.py`) |
 
 ### Runtime Files
 
@@ -1284,6 +1300,11 @@ python-docx          # DOCX text extraction (resume parsing)
 fpdf2                # PDF generation (reports)
 spacy                # Named Entity Recognition (NER)
 pydantic[email]      # Data validation with email support
+
+# Optional — Deep Learning upgrade (for BERT AI detector & Sentence-BERT matcher)
+torch                # PyTorch runtime
+transformers         # HuggingFace Transformers (RoBERTa model)
+sentence-transformers # Sentence-BERT embeddings for semantic matching
 ```
 
 ### Frontend (Node.js)
@@ -1338,6 +1359,34 @@ Verify NER model installation:
 ```bash
 python -c "import spacy; spacy.load('en_core_web_sm'); print('NER model ready')"
 ```
+
+### 1b. (Optional) Deep Learning Upgrade
+
+To use the BERT-based AI text detector (`ai_text_detector_bert.py`) or Sentence-BERT resume matcher (`resume_matcher_semantic.py`), install the additional dependencies:
+
+```bash
+pip install torch transformers sentence-transformers
+```
+
+Then switch the imports in `main.py` and `explainer.py`:
+
+```python
+# For BERT AI text detection — change in main.py and explainer.py:
+from ai_text_detector_bert import detect_ai_text  # instead of ai_text_detector
+
+# For Sentence-BERT resume matching — change in main.py:
+from resume_matcher_semantic import compute_match_score  # instead of resume_matcher
+```
+
+> **Note:** The first API call will download models (~500 MB for RoBERTa, ~80 MB for Sentence-BERT) and cache them locally. Subsequent calls load from cache instantly. Both modules fall back to the original ML approach automatically if PyTorch/transformers are unavailable.
+
+To optionally fine-tune the BERT AI detector on your own `AI_Human.csv` dataset:
+
+```bash
+python ai_text_detector_bert.py
+```
+
+---
 
 ### 2. Train Models (First Time Only)
 
