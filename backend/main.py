@@ -145,18 +145,33 @@ def api_me(user=Depends(get_current_user)):
 @app.post("/api/scan/url", tags=["Job Scanning"])
 def scan_job_url(req: JobRequest, user=Depends(get_optional_user)):
     """Scan a job posting URL for scam indicators."""
-    # Scrape job details
-    job = scrape_job(req.url)
+    try:
+        # Scrape job details
+        job = scrape_job(req.url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    # Compute risk
-    score = compute_risk(job["description"], job["salary"], job["email"])
-    level = risk_level(score)
+    description = (job.get("description") or "").strip()
+    if not description:
+        raise HTTPException(status_code=422, detail="No readable job description found at the provided URL")
 
-    # Get explanation
-    explanation = explain_prediction(job["description"])
+    salary = job.get("salary")
+    email = job.get("email")
 
-    # Salary analysis
-    salary_analysis = predict_salary_anomaly(job["salary"], job["description"])
+    try:
+        # Compute risk
+        score = compute_risk(description, salary, email)
+        level = risk_level(score)
+
+        # Get explanation
+        explanation = explain_prediction(description)
+
+        # Salary analysis
+        salary_analysis = predict_salary_anomaly(salary, description)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Job analysis failed: {exc}") from exc
 
     # Save to history if user is logged in
     if user:
@@ -166,11 +181,11 @@ def scan_job_url(req: JobRequest, user=Depends(get_optional_user)):
                (user_id, url, risk_score, risk_level, nlp_score, salary_score, domain_score, 
                 description, salary, email_found)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (user["id"], req.url, score, level,
+              (user["id"], req.url, score, level,
              explanation.get("scam_probability", 0),
              salary_analysis.get("anomaly_score", 0) * 100,
              0,  # domain score from risk engine
-             job["description"][:1000], job["salary"], job["email"])
+               description[:1000], salary, email)
         )
         conn.commit()
         conn.close()

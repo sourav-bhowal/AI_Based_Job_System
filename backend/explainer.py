@@ -1,5 +1,5 @@
 import numpy as np
-from model import load_model, vectorizer, model
+import model as scam_model
 import re
 from ner_extractor import extract_job_entities
 from ai_text_detector import detect_ai_text
@@ -16,21 +16,19 @@ def explain_prediction(text: str, num_features: int = 10) -> dict:
     Returns:
         dict with prediction, confidence, and top contributing features
     """
-    load_model()
+    current_model, current_vectorizer = scam_model.get_model_objects()
 
     # Get prediction
-    X = vectorizer.transform([text])
-    prediction = model.predict(X)[0]
-    probability = model.predict_proba(X)[0]
-    scam_prob = probability[1]
-    legit_prob = probability[0]
+    X = current_vectorizer.transform([text])
+    prediction = current_model.predict(X)[0]
+    legit_prob, scam_prob = scam_model.predict_probabilities(text)
 
     # Get feature names and their weights
-    feature_names = vectorizer.get_feature_names_out()
+    feature_names = current_vectorizer.get_feature_names_out()
 
     # Get model coefficients (for LogisticRegression)
-    if hasattr(model, 'coef_'):
-        coefficients = model.coef_[0]
+    if hasattr(current_model, 'coef_'):
+        coefficients = current_model.coef_[0]
     else:
         # Fallback for non-linear models
         return {

@@ -1,17 +1,89 @@
 import requests
 from bs4 import BeautifulSoup
 import re
+from urllib.parse import urlparse
 from ner_extractor import extract_job_entities
+
+try:
+    import cloudscraper
+except ImportError:
+    cloudscraper = None
+
+
+REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Upgrade-Insecure-Requests": "1",
+}
+
+
+def validate_job_url(url: str) -> str:
+    """Validate and normalize a job URL."""
+    normalized_url = (url or "").strip()
+    if not normalized_url:
+        raise ValueError("Job URL is required")
+
+    parsed = urlparse(normalized_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Provide a valid job URL starting with http:// or https://")
+
+    return normalized_url
+
+
+def _fetch_url(url: str):
+    """Fetch a URL using progressively stronger scraping strategies."""
+    errors = []
+
+    try:
+        response = requests.get(url, timeout=15, headers=REQUEST_HEADERS, allow_redirects=True)
+        response.raise_for_status()
+        return response
+    except requests.HTTPError as exc:
+        status_code = exc.response.status_code if exc.response is not None else None
+        errors.append(f"requests HTTP {status_code}" if status_code else "requests HTTP error")
+    except requests.RequestException:
+        errors.append("requests network error")
+
+    if cloudscraper is not None:
+        try:
+            scraper = cloudscraper.create_scraper(
+                browser={"browser": "chrome", "platform": "windows", "mobile": False}
+            )
+            response = scraper.get(url, timeout=20, headers=REQUEST_HEADERS, allow_redirects=True)
+            response.raise_for_status()
+            return response
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            errors.append(f"cloudscraper HTTP {status_code}" if status_code else "cloudscraper HTTP error")
+        except requests.RequestException:
+            errors.append("cloudscraper network error")
+
+    error_summary = ", ".join(errors) if errors else "unknown fetch error"
+    if "403" in error_summary:
+        raise RuntimeError(
+            "The target site blocked automated access (403 Forbidden). "
+            "Try /api/scan/text with the job description text for this listing."
+        )
+
+    raise RuntimeError(f"Unable to fetch the provided URL: {error_summary}")
 
 # Scrape job details from a given URL
 def scrape_job(url: str):
+    url = validate_job_url(url)
+
     # Make a GET request to the URL
-    res = requests.get(url, timeout=10)
+    res = _fetch_url(url)
+
     # Parse the HTML content using BeautifulSoup
     soup = BeautifulSoup(res.text, "html.parser")
 
     # Extract the text content from the page
-    text = soup.get_text(separator=" ")
+    text = re.sub(r"\s+", " ", soup.get_text(separator=" ")).strip()
+    if not text:
+        raise RuntimeError("The provided page does not contain readable text content")
 
     # NER entity extraction
     try:
