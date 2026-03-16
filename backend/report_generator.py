@@ -12,6 +12,45 @@ os.makedirs(REPORTS_DIR, exist_ok=True)
 class ScamReportPDF(FPDF):
     """Custom PDF class for scam analysis reports."""
 
+    _UNICODE_REPLACEMENTS = str.maketrans({
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201C": '"',
+        "\u201D": '"',
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2022": "*",
+        "\u2026": "...",
+        "\u00A0": " ",
+    })
+
+    def _sanitize_text(self, value):
+        text = "" if value is None else str(value)
+        text = text.translate(self._UNICODE_REPLACEMENTS)
+        return text.encode("latin-1", errors="replace").decode("latin-1")
+
+    def cell(self, *args, **kwargs):
+        if "text" in kwargs:
+            kwargs["text"] = self._sanitize_text(kwargs["text"])
+        elif "txt" in kwargs:
+            kwargs["txt"] = self._sanitize_text(kwargs["txt"])
+        elif len(args) >= 3:
+            args = list(args)
+            args[2] = self._sanitize_text(args[2])
+            args = tuple(args)
+        return super().cell(*args, **kwargs)
+
+    def multi_cell(self, *args, **kwargs):
+        if "text" in kwargs:
+            kwargs["text"] = self._sanitize_text(kwargs["text"])
+        elif "txt" in kwargs:
+            kwargs["txt"] = self._sanitize_text(kwargs["txt"])
+        elif len(args) >= 3:
+            args = list(args)
+            args[2] = self._sanitize_text(args[2])
+            args = tuple(args)
+        return super().multi_cell(*args, **kwargs)
+
     def header(self):
         self.set_font("Helvetica", "B", 16)
         self.set_text_color(41, 128, 185)  # Blue
