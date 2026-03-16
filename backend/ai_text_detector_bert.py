@@ -16,7 +16,7 @@ import os
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BERT_MODEL_DIR = os.path.join(SCRIPT_DIR, "models", "ai_detector_bert")
-CSV_PATH = os.path.join(SCRIPT_DIR, "datasets", "AI_Human.csv")
+CSV_PATH = os.path.join(SCRIPT_DIR, "data", "AI_Human.csv")
 
 DEFAULT_MODEL_NAME = "openai-community/roberta-base-openai-detector"
 

@@ -29,7 +29,7 @@ except ImportError:
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SALARY_MODEL_PATH = os.path.join(SCRIPT_DIR, "models", "salary_model.pkl")
-CSV_PATH = os.path.join(SCRIPT_DIR, "datasets", "synthetic_salary_dataset.csv")
+CSV_PATH = os.path.join(SCRIPT_DIR, "data", "synthetic_salary_dataset.csv")
 
 # Lazy-loaded RF model Pipeline
 _salary_model = None

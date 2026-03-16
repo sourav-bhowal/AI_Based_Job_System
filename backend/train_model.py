@@ -32,7 +32,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def load_and_prepare_data():
     """Load dataset and prepare features."""
-    csv_path = os.path.join(SCRIPT_DIR, "datasets", "fake_job_postings.csv")
+    csv_path = os.path.join(SCRIPT_DIR, "data", "fake_job_postings.csv")
     print(f"Loading data from: {csv_path}")
     df = pd.read_csv(csv_path)
 

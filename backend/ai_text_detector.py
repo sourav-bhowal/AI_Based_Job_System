@@ -21,7 +21,7 @@ except ImportError:
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 AI_DETECTOR_MODEL_PATH = os.path.join(SCRIPT_DIR, "models", "ai_detector_model.pkl")
 AI_DETECTOR_VECTORIZER_PATH = os.path.join(SCRIPT_DIR, "models", "ai_detector_vectorizer.pkl")
-CSV_PATH = os.path.join(SCRIPT_DIR, "datasets", "AI_Human.csv")
+CSV_PATH = os.path.join(SCRIPT_DIR, "data", "AI_Human.csv")
 
 # Lazy-loaded trained model
 _ai_model = None

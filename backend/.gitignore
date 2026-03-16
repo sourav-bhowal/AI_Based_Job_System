@@ -1,6 +1,6 @@
 /.venv
 /.vscode
-/datasets
+/data
 scam_detector.db
 .env
 /__pycache__
