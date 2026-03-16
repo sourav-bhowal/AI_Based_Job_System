@@ -151,7 +151,7 @@ export default function ResumeUploader({
                     </div>
                     <div>
                       <span className="font-semibold text-[var(--foreground)] block">{r.filename}</span>
-                      <span className="text-xs text-[var(--muted)]">{new Date(r.uploaded_at).toLocaleDateString()}</span>
+                      <span className="text-xs text-[var(--muted)]">{new Date(r.uploaded_at).toLocaleDateString("en-US")}</span>
                     </div>
                   </div>
                   {selectedResumeId === r.id && (

@@ -32,7 +32,8 @@ async function serverFetch<T>(
   const token = cookieStore.get("auth_token")?.value;
 
   const headers = new Headers(options?.headers);
-  if (!headers.has("Content-Type")) {
+  const isFormData = options?.body instanceof FormData;
+  if (!headers.has("Content-Type") && !isFormData) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -51,7 +52,7 @@ async function serverFetch<T>(
     try {
       const parsed = JSON.parse(errorBody);
       detail = parsed.detail || detail;
-    } catch {}
+    } catch { }
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
 

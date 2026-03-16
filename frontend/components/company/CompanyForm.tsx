@@ -131,7 +131,7 @@ export default function CompanyForm() {
             </Card>
           )}
 
-          {result.warnings.length > 0 && (
+          {result.warnings?.length > 0 && (
             <Card variant="warning" className="border-[var(--warning)]/30">
               <h3 className="mb-3 text-lg font-bold text-[var(--warning)] flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5" /> Active Warnings
