@@ -64,12 +64,39 @@ for category, skills in SKILLS_DATABASE.items():
 
 # Education patterns
 EDUCATION_PATTERNS = [
-    r"(?:bachelor|b\.?s\.?|b\.?tech|b\.?e\.?|b\.?sc|b\.?a\.?|b\.?com)[\s\.]*(?:in\s+)?[\w\s]+",
-    r"(?:master|m\.?s\.?|m\.?tech|m\.?e\.?|m\.?sc|m\.?a\.?|mba|m\.?b\.?a\.?)[\s\.]*(?:in\s+)?[\w\s]+",
-    r"(?:ph\.?d\.?|doctorate|doctoral)[\s\.]*(?:in\s+)?[\w\s]+",
-    r"(?:diploma|associate|certification|certificate)[\s\.]*(?:in\s+)?[\w\s]+",
-    r"(?:10th|12th|high school|higher secondary|intermediate|ssc|hsc)",
+    r"\b(?:bachelor(?:'s)?|b\.\s?s\.?|b\.\s?tech|b\.\s?e\.?|b\.\s?sc|b\.\s?a\.?|b\.\s?com)\b",
+    r"\b(?:master(?:'s)?|m\.\s?s\.?|m\.\s?tech|m\.\s?e\.?|m\.\s?sc|m\.\s?a\.?|mba|m\.\s?b\.\s?a\.?)\b",
+    r"\b(?:ph\.\s?d\.?|doctorate|doctoral)\b",
+    r"\b(?:diploma|associate|certification|certificate)\b",
+    r"\b(?:10th|12th|high school|higher secondary|intermediate|ssc|hsc)\b",
 ]
+
+SECTION_HEADER_PATTERN = re.compile(
+    r"^\s*(education|academics|qualification|qualifications|experience|projects|skills|certifications|summary|objective|achievements)\s*:?")
+
+
+def _extract_education_section_lines(text: str) -> list:
+    """Extract lines from the education section when present."""
+    lines = [line.strip(" •\t-") for line in text.splitlines() if line.strip()]
+    if not lines:
+        return []
+
+    start_index = None
+    for index, line in enumerate(lines):
+        if re.match(r"^\s*(education|academics|qualification|qualifications)\s*:?$", line, re.IGNORECASE):
+            start_index = index + 1
+            break
+
+    if start_index is None:
+        return lines
+
+    section_lines = []
+    for line in lines[start_index:]:
+        if SECTION_HEADER_PATTERN.match(line):
+            break
+        section_lines.append(line)
+
+    return section_lines if section_lines else lines
 
 # Experience patterns
 EXPERIENCE_PATTERNS = [
@@ -127,12 +154,18 @@ def extract_skills(text: str) -> dict:
 def extract_education(text: str) -> list:
     """Extract education qualifications from text."""
     education = []
-    for pattern in EDUCATION_PATTERNS:
-        matches = re.finditer(pattern, text, re.IGNORECASE)
-        for match in matches:
-            edu = match.group().strip()
-            if len(edu) > 5 and edu not in education:  # Filter very short matches
-                education.append(edu)
+    degree_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in EDUCATION_PATTERNS]
+    candidate_lines = _extract_education_section_lines(text)
+
+    for line in candidate_lines:
+        normalized = re.sub(r"\s+", " ", line).strip(" ,;:-")
+        if len(normalized) < 6 or len(normalized) > 120:
+            continue
+
+        if any(pattern.search(normalized) for pattern in degree_patterns):
+            if normalized not in education:
+                education.append(normalized)
+
     return education[:5]  # Return top 5
 
 

@@ -61,7 +61,7 @@ The AI Job Analysis and Detection System is a **FastAPI-based backend** that com
 | **AI Text Detection**   | Random Forest Classifier trained on TF-IDF features (1 GB Human vs AI dataset)        |
 | **Salary Prediction**   | Random Forest Regressor Pipeline (trained on synthetic salary dataset)                 |
 | **NER**                 | spaCy (`en_core_web_sm` pipeline)                                                     |
-| **Web Scraping**        | BeautifulSoup4, Requests                                                              |
+| **Web Scraping**        | Playwright (Chromium), BeautifulSoup4                                                 |
 | **Domain Analysis**     | python-whois                                                                          |
 | **Resume Parsing**      | PyPDF2, python-docx                                                                   |
 | **PDF Generation**      | fpdf2                                                                                 |
@@ -1319,6 +1319,24 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
+python -m playwright install chromium
+```
+
+If your virtual environment is managed with `uv` and `python -m pip` is unavailable, use:
+
+```bash
+cd backend
+.venv\Scripts\activate
+
+uv pip install -r requirements.txt
+uv pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+python -m playwright install chromium
+```
+
+Verify NER model installation:
+
+```bash
+python -c "import spacy; spacy.load('en_core_web_sm'); print('NER model ready')"
 ```
 
 ### 2. Train Models (First Time Only)
