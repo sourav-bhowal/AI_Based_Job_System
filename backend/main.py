@@ -159,6 +159,8 @@ def scan_job_url(req: JobRequest, user=Depends(get_optional_user)):
 
     salary = job.get("salary")
     email = job.get("email")
+    job_title = job.get("job_title")
+    company_name = job.get("company_name")
 
     try:
         # Compute risk
@@ -178,14 +180,14 @@ def scan_job_url(req: JobRequest, user=Depends(get_optional_user)):
         conn = get_db()
         conn.execute(
             """INSERT INTO scan_history 
-               (user_id, url, risk_score, risk_level, nlp_score, salary_score, domain_score, 
-                description, salary, email_found)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-              (user["id"], req.url, score, level,
+                             (user_id, url, job_title, company_name, risk_score, risk_level, nlp_score, salary_score, domain_score, 
+                                description, salary, email_found)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (user["id"], req.url, job_title, company_name, score, level,
              explanation.get("scam_probability", 0),
              salary_analysis.get("anomaly_score", 0) * 100,
              0,  # domain score from risk engine
-               description[:1000], salary, email)
+               description, salary, email)
         )
         conn.commit()
         conn.close()

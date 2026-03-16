@@ -66,6 +66,52 @@ def _normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "")).strip()
 
 
+def _extract_job_title(soup: BeautifulSoup) -> str | None:
+    """Extract a best-effort job title from common page elements."""
+    selectors = [
+        "meta[property='og:title']",
+        "meta[name='twitter:title']",
+        "meta[name='title']",
+        "h1",
+        "title",
+    ]
+
+    for selector in selectors:
+        node = soup.select_one(selector)
+        if not node:
+            continue
+        value = node.get("content") if node.has_attr("content") else node.get_text(" ", strip=True)
+        value = _normalize_text(value)
+        if value:
+            return value[:200]
+
+    return None
+
+
+def _extract_company_name(soup: BeautifulSoup, entities: dict) -> str | None:
+    """Extract company name, preferring NER-detected organizations."""
+    companies = entities.get("companies") or []
+    if companies:
+        best_company = _normalize_text(companies[0])
+        if best_company:
+            return best_company[:150]
+
+    selectors = [
+        "meta[property='og:site_name']",
+        "meta[name='application-name']",
+    ]
+
+    for selector in selectors:
+        node = soup.select_one(selector)
+        if not node:
+            continue
+        value = _normalize_text(node.get("content", ""))
+        if value:
+            return value[:150]
+
+    return None
+
+
 def extract_job_description(soup: BeautifulSoup) -> str:
     """Extract full rendered body text from the page."""
 
@@ -99,11 +145,16 @@ def scrape_job(url: str):
     except Exception:
         entities = {"companies": [], "locations": [], "money": [], "dates": [], "persons": [], "entity_count": 0, "all_entities": {}, "scam_signals": []}
 
+    job_title = _extract_job_title(soup)
+    company_name = _extract_company_name(soup, entities)
+
     # Return a dictionary with the job description, salary, email, and NER entities
     return {
         "description": text,
         "salary": extract_salary(text),
         "email": extract_email(text),
+        "job_title": job_title,
+        "company_name": company_name,
         "entities": entities,
     }
 
