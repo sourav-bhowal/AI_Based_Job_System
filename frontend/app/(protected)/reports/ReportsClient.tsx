@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getReports, createReport, voteReport, getBlacklist } from "@/lib/api";
+import { 
+  getReportsAction, 
+  getBlacklistAction, 
+  createReportAction, 
+  voteReportAction 
+} from "@/lib/actions/reports";
 import type { ScamReport, BlacklistItem } from "@/lib/types";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import ErrorDisplay from "@/components/ErrorDisplay";
@@ -20,38 +25,92 @@ interface ReportsClientProps {
 export default function ReportsClient({ initialReports, initialTotalPages, initialBlacklist }: ReportsClientProps) {
   const { isAuthenticated } = useAuth();
   const [view, setView] = useState<View>("reports");
+  
+  // Data State
   const [reports, setReports] = useState<ScamReport[]>(initialReports);
   const [blacklist, setBlacklist] = useState<BlacklistItem[]>(initialBlacklist);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(initialTotalPages);
-  const [loading, setLoading] = useState(false);
+  
+  // Loading & Error States
+  const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [description, setDescription] = useState("");
-  const [jobUrl, setJobUrl] = useState("");
-  const [jobTitle, setJobTitle] = useState("");
-  const [evidence, setEvidence] = useState("");
-  const [category, setCategory] = useState("other");
-  const [submitLoading, setSubmitLoading] = useState(false);
+  
+  // Form State
   const [submitMsg, setSubmitMsg] = useState("");
 
   async function fetchReports(p: number) {
-    setLoading(true); setError("");
-    try { const data = await getReports(p, 20); setReports(data.reports); setTotalPages(data.total_pages); }
-    catch (err) { setError(err instanceof Error ? err.message : "Failed"); } finally { setLoading(false); }
+    setError("");
+    startTransition(async () => {
+      const res = await getReportsAction(p, 20);
+      if (res.success && res.data) {
+        setReports(res.data.reports);
+        setTotalPages(res.data.total_pages);
+      } else {
+        setError(res.error || "Failed to load reports");
+      }
+    });
   }
+
   async function fetchBlacklist() {
-    setLoading(true); setError("");
-    try { const data = await getBlacklist(); setBlacklist(data.blacklist); }
-    catch (err) { setError(err instanceof Error ? err.message : "Failed"); } finally { setLoading(false); }
+    setError("");
+    startTransition(async () => {
+      const res = await getBlacklistAction();
+      if (res.success && res.data) {
+        setBlacklist(res.data.blacklist);
+      } else {
+        setError(res.error || "Failed to load blacklist");
+      }
+    });
   }
-  function handleViewChange(v: View) { setView(v); if (v === "blacklist") fetchBlacklist(); if (v === "reports") fetchReports(1); }
-  async function handleVote(id: number, type: "up"|"down") { if (!isAuthenticated) return; try { await voteReport(id, type); fetchReports(page); } catch {} }
-  function handlePageChange(p: number) { setPage(p); fetchReports(p); }
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); setSubmitLoading(true); setSubmitMsg("");
-    try { await createReport({ company_name: companyName, description, job_url: jobUrl || undefined, job_title: jobTitle || undefined, evidence: evidence || undefined, category }); setSubmitMsg("Report submitted successfully."); setCompanyName(""); setDescription(""); setJobUrl(""); setJobTitle(""); setEvidence(""); setCategory("other"); }
-    catch (err) { setError(err instanceof Error ? err.message : "Failed"); } finally { setSubmitLoading(false); }
+
+  function handleViewChange(v: View) { 
+    setView(v); 
+    if (v === "blacklist") fetchBlacklist(); 
+    if (v === "reports") fetchReports(1); 
+  }
+
+  async function handleVote(id: number, type: "up"|"down") { 
+    if (!isAuthenticated) return;
+    
+    // Optimistic UI update
+    setReports(prev => prev.map(r => r.id === id ? {
+      ...r,
+      upvotes: type === "up" ? r.upvotes + 1 : r.upvotes,
+      downvotes: type === "down" ? r.downvotes + 1 : r.downvotes
+    } : r));
+
+    try {
+      const res = await voteReportAction(id, type);
+      if (!res.success) {
+        throw new Error(res.error);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to vote");
+      fetchReports(page); // revert
+    } 
+  }
+
+  function handlePageChange(p: number) { 
+    setPage(p); 
+    fetchReports(p); 
+  }
+
+  async function handleFormSubmit(formData: FormData) {
+    setError("");
+    setSubmitMsg("");
+    
+    startTransition(async () => {
+      const res = await createReportAction(null, formData);
+      if (res.success) {
+        setSubmitMsg("Report submitted successfully. Thank you for contributing.");
+        // Reset form optionally, or just leave it
+        const form = document.querySelector("form") as HTMLFormElement;
+        form?.reset();
+      } else {
+        setError(res.error || "Failed to submit report");
+      }
+    });
   }
 
   const inputCls = "w-full rounded-xl border border-[var(--card-border)] bg-[var(--background)] px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)]/60 transition-all duration-200 focus:ring-2 focus:ring-[var(--accent)]/20 focus:border-[var(--accent)] outline-none";
@@ -73,7 +132,7 @@ export default function ReportsClient({ initialReports, initialTotalPages, initi
 
       {/* Reports */}
       {view === "reports" && (
-        loading ? <LoadingSpinner message="Loading community reports..." /> : (
+        isPending ? <LoadingSpinner message="Loading community reports..." /> : (
           <div className="space-y-5 animate-fade-in">
             {reports.map((r) => (
               <Card key={r.id}>
@@ -144,7 +203,7 @@ export default function ReportsClient({ initialReports, initialTotalPages, initi
 
       {/* Blacklist */}
       {view === "blacklist" && (
-        loading ? <LoadingSpinner message="Loading blacklist database..." /> : (
+        isPending ? <LoadingSpinner message="Loading blacklist database..." /> : (
           <div className="space-y-3 animate-fade-in">
             <div className="mb-6 rounded-xl border border-[var(--danger)]/20 bg-[var(--danger-subtle)]/50 p-4">
               <h3 className="text-sm font-bold text-[var(--danger)] flex items-center gap-2 mb-1">
@@ -194,33 +253,33 @@ export default function ReportsClient({ initialReports, initialTotalPages, initi
               <h2 className="text-xl font-bold text-[var(--foreground)]">File a Scam Report</h2>
               <p className="text-sm text-[var(--muted)] mt-1">Provide clear, accurate details to help protect others from employment fraud.</p>
             </div>
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form action={handleFormSubmit} className="space-y-5">
               {submitMsg && <div className="animate-fade-in rounded-xl bg-[var(--success-subtle)] border border-[var(--success)]/20 p-4 text-sm font-medium text-[var(--success)] flex items-center gap-2"><ThumbsUp className="h-4 w-4" /> {submitMsg}</div>}
               
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">Company Name <span className="text-[var(--danger)]">*</span></label>
-                <input required value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Fraudulent Corp LLC" className={inputCls} />
+                <input name="company_name" required placeholder="Fraudulent Corp LLC" className={inputCls} />
               </div>
 
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">Description of the Scam <span className="text-[var(--danger)]">*</span></label>
-                <textarea required rows={4} value={description} onChange={e => setDescription(e.target.value)} placeholder="Explain what happened in detail. How did they contact you? What red flags did you notice?" className={inputCls} />
+                <textarea name="description" required rows={4} placeholder="Explain what happened in detail. How did they contact you? What red flags did you notice?" className={inputCls} />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">Job Title <span className="text-[var(--muted)] font-normal">(optional)</span></label>
-                  <input value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="Data Entry Clerk" className={inputCls} />
+                  <input name="job_title" placeholder="Data Entry Clerk" className={inputCls} />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">Job URL <span className="text-[var(--muted)] font-normal">(optional)</span></label>
-                  <input type="url" value={jobUrl} onChange={e => setJobUrl(e.target.value)} placeholder="https://..." className={inputCls} />
+                  <input name="job_url" type="url" placeholder="https://..." className={inputCls} />
                 </div>
               </div>
 
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">Category <span className="text-[var(--danger)]">*</span></label>
-                <select value={category} onChange={e => setCategory(e.target.value)} className={inputCls}>
+                <select name="category" defaultValue="other" className={inputCls}>
                   <option value="other">Other</option>
                   <option value="phishing">Phishing / Info Harvesting</option>
                   <option value="fake_company">Fake Company / Identity</option>
@@ -231,12 +290,12 @@ export default function ReportsClient({ initialReports, initialTotalPages, initi
 
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-[var(--foreground)]">Evidence <span className="text-[var(--muted)] font-normal">(optional)</span></label>
-                <textarea rows={2} value={evidence} onChange={e => setEvidence(e.target.value)} placeholder="Links to emails, messages, or screenshots..." className={inputCls} />
+                <textarea name="evidence" rows={2} placeholder="Links to emails, messages, or screenshots..." className={inputCls} />
               </div>
 
-              <button type="submit" disabled={submitLoading}
+              <button type="submit" disabled={isPending}
                 className="w-full sm:w-auto mt-2 rounded-xl bg-[var(--accent)] px-8 py-3.5 text-sm font-bold text-white shadow-[var(--shadow-sm)] transition-all duration-200 hover:bg-[var(--accent-light)] hover:shadow-[var(--shadow-md)] disabled:opacity-50">
-                {submitLoading ? "Submitting Report..." : "Submit Report securely"}
+                {isPending ? "Submitting Report..." : "Submit Report securely"}
               </button>
             </form>
           </Card>

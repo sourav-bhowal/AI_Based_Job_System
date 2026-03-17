@@ -21,6 +21,8 @@ export interface AuthResponse {
 
 export interface JobDetails {
   description: string;
+  job_title?: string | null;
+  company_name?: string | null;
   salary: string | null;
   email: string | null;
   entities?: {
@@ -66,11 +68,13 @@ export interface Explanation {
     money_found: string[];
     entity_count: number;
   };
+  ai_detection?: AIDetectionResult | null;
   total_features_analyzed?: number;
 }
 
 export interface SalaryAnalysis {
   anomaly_score: number;
+  anomaly_level?: string;
   salary_provided?: string | null;
   currency?: string;
   detected_role?: string;
@@ -79,7 +83,7 @@ export interface SalaryAnalysis {
     model: string;
     inferred_experience_years: number;
     inferred_education: string;
-    deviation_percent: number;
+    deviation_percent?: number;
   };
   analysis: string | string[];
 }
@@ -156,6 +160,7 @@ export interface ResumeListItem {
 }
 
 export interface CourseRecommendation {
+  skill?: string;
   title: string;
   platform: string;
   url?: string;
@@ -163,29 +168,50 @@ export interface CourseRecommendation {
 }
 
 export interface TrainingRoadmapItem {
+  week: string;
   skill: string;
   priority: string;
-  courses: CourseRecommendation[];
+  goal: string;
+  resources: CourseRecommendation[];
+}
+
+export interface ATSFeedbackItem {
+  type: "good" | "warning" | "error";
+  message: string;
 }
 
 export interface ATSScore {
   score: number;
-  keyword_match_rate: number;
-  format_score: number;
-  section_scores: Record<string, number>;
-  tips: string[];
+  feedback: ATSFeedbackItem[];
+}
+
+export interface StrengthItem {
+  skill: string;
+  status: string;
+  message: string;
+  bridge_skill?: string;
+  similarity?: number;
+}
+
+export interface WeaknessItem {
+  skill: string;
+  status: string;
+  message: string;
+  priority?: string;
 }
 
 export interface MatchResult {
   match_score: number;
-  strengths: string[];
-  weaknesses: string[];
-  recommendations: string[];
-  skill_match_details?: {
-    matched_skills: string[];
-    missing_skills: string[];
-    extra_skills: string[];
-  };
+  cosine_similarity?: number;
+  similarity_method?: string;
+  skill_match_percentage?: number;
+  total_job_skills?: number;
+  matching_skills_count?: number;
+  partial_match_skills_count?: number;
+  missing_skills_count?: number;
+  strengths: StrengthItem[];
+  weaknesses: WeaknessItem[];
+  recommendations: CourseRecommendation[];
   ats_score?: ATSScore;
   training_roadmap?: TrainingRoadmapItem[];
 }
@@ -206,31 +232,23 @@ export interface MatchHistoryItem {
 
 // ========== Company Types ==========
 
+export interface CompanyDetail {
+  type: "good" | "warning" | "danger";
+  message: string;
+}
+
 export interface CompanyCheckResult {
+  company_name: string;
   trust_score: number;
   trust_level: string;
-  breakdown: {
-    domain_age_score: number;
-    email_score: number;
-    social_presence_score: number;
-    community_score: number;
-  };
-  domain_info: {
-    age_years: number | null;
-    registrar: string | null;
-    creation_date: string | null;
-  };
-  social_presence: {
-    linkedin: boolean;
-    twitter: boolean;
-    github: boolean;
-  };
-  community_reports: {
-    report_count: number;
+  breakdown: Record<string, number>;
+  details: CompanyDetail[];
+  community_data: {
+    total_reports: number;
+    total_upvotes: number;
     is_blacklisted: boolean;
-    avg_severity: string;
+    blacklist_trust_score: number | null;
   };
-  warnings: string[];
 }
 
 // ========== Community Reports Types ==========

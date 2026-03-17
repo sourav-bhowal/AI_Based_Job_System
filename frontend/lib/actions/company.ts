@@ -20,6 +20,19 @@ export async function checkCompanyAction(
     const data = await checkCompanySSR(companyName, domain || undefined, email || undefined);
     return { success: true, data };
   } catch (error: any) {
-    return { success: false, error: error.message || "Failed to check company" };
+    let msg = error.message;
+    if (msg?.includes("Failed to fetch") || msg?.includes("fetch failed")) {
+      msg = "Cannot connect to backend server. Please ensure the API is running.";
+    } else if (msg?.includes("timeout") || msg?.includes("Timeout")) {
+      msg = "The company verification timed out. Deep scans can sometimes take 30-60s. Please try again.";
+    } else if (msg?.includes("422") || msg?.includes("Validation")) {
+      msg = "Invalid company details provided.";
+    } else if (msg?.includes("401") || msg?.includes("Unauthorized") || msg?.includes("Not authenticated")) {
+      msg = "Your session expired. Please log in again.";
+    } else {
+      msg = msg || "Failed to verify the company. An internal issue occurred.";
+    }
+    
+    return { success: false, error: msg };
   }
 }

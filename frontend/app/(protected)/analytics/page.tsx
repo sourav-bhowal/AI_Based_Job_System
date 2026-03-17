@@ -202,7 +202,7 @@ export default async function AnalyticsPage() {
               <BrainCircuit className="h-5 w-5 text-[var(--accent)]" /> Machine Learning Pipeline
             </h2>
             <div className="text-sm font-medium text-[var(--muted)] bg-[var(--success-subtle)] px-3 py-1.5 rounded-lg border border-[var(--success)]/20">
-              Active Primary: <span className="font-bold text-[var(--success)]">{models.best_model}</span>
+              Active Primary: <span className="font-bold text-[var(--success)]">{models.best_model || models.models.reduce((prev, current) => (prev.f1_score > current.f1_score) ? prev : current).model_name}</span>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -218,7 +218,8 @@ export default async function AnalyticsPage() {
               </thead>
               <tbody>
                 {models.models.map((m, idx) => {
-                  const isBest = m.model_name === models.best_model;
+                  const bestModelName = models.best_model || models.models.reduce((prev, current) => (prev.f1_score > current.f1_score) ? prev : current).model_name;
+                  const isBest = m.model_name === bestModelName;
                   return (
                     <tr key={m.model_name} className={`border-t border-[var(--card-border)]/50 transition-colors ${
                       isBest ? "bg-[var(--success-subtle)]/30 backdrop-blur-sm" : idx % 2 === 0 ? "bg-[var(--card)]" : "bg-[var(--background)]"

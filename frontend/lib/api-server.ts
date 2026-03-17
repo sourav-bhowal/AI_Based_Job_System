@@ -24,7 +24,7 @@ import { cookies } from "next/headers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
-async function serverFetch<T>(
+export async function serverFetch<T = any>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> {
@@ -54,6 +54,12 @@ async function serverFetch<T>(
       detail = parsed.detail || detail;
     } catch { }
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+
+  // Handle PDF / binary responses
+  const contentType = res.headers.get("content-type");
+  if (contentType && contentType.includes("application/pdf")) {
+    return (await res.blob()) as unknown as T;
   }
 
   return res.json();
@@ -198,6 +204,26 @@ export async function getBlacklistSSR(): Promise<{
   blacklist: BlacklistItem[];
 }> {
   return serverFetch("/api/reports/blacklist");
+}
+
+// ========== PDF Reports ==========
+
+export async function generateScanPdfSSR(url: string): Promise<Blob> {
+  return serverFetch<Blob>("/api/reports/generate-scan-pdf", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export async function generateMatchPdfSSR(
+  resume_id: number,
+  job_url?: string,
+  job_text?: string
+): Promise<Blob> {
+  return serverFetch<Blob>("/api/reports/generate-match-pdf", {
+    method: "POST",
+    body: JSON.stringify({ resume_id, job_url, job_text }),
+  });
 }
 
 // ========== System ==========

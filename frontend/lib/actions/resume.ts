@@ -1,6 +1,6 @@
 "use server";
 
-import { uploadResumeSSR, matchResumeSSR } from "@/lib/api-server";
+import { uploadResumeSSR, matchResumeSSR, generateMatchPdfSSR } from "@/lib/api-server";
 import { ResumeUploadResult, MatchResult } from "@/lib/types";
 
 export type UploadActionState = 
@@ -47,6 +47,25 @@ export async function matchResumeAction(
     const data = await matchResumeSSR(resumeId, jobUrl || undefined, jobText || undefined);
     return { success: true, data };
   } catch (error: any) {
-    return { success: false, error: error.message || "Failed to match resume" };
+    let msg = error.message || "Failed to match resume";
+    if (msg.includes("Playwright") || msg.toLowerCase().includes("unable to fetch") || msg.includes("Timeout")) {
+      msg = "Scraping blocked by the host site (e.g., LinkedIn). Please paste the job text manually.";
+    }
+    return { success: false, error: msg };
+  }
+}
+
+export async function downloadMatchPdfAction(
+  resumeId: number,
+  jobUrl?: string,
+  jobText?: string
+) {
+  try {
+    const blob = await generateMatchPdfSSR(resumeId, jobUrl, jobText);
+    const arrayBuffer = await blob.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    return { success: true, pdfBase64: base64 };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to generate PDF" };
   }
 }
