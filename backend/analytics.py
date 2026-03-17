@@ -105,7 +105,7 @@ def get_top_reported_companies(limit: int = 10) -> list:
 def get_model_comparison() -> dict:
     """Get model comparison metrics."""
     # Try JSON file first (more detailed)
-    metrics_path = os.path.join(SCRIPT_DIR, "model_metrics.json")
+    metrics_path = os.path.join(SCRIPT_DIR, "models", "model_metrics.json")
     if os.path.exists(metrics_path):
         with open(metrics_path, "r") as f:
             return json.load(f)
