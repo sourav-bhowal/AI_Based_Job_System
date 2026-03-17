@@ -142,20 +142,8 @@ ai-job-scam-detector/
 │   │   ├── ai_detector_bert/                 #   Fine-tuned RoBERTa model (+ checkpoint-500/, checkpoint-1000/)
 │   │   └── ner_bert/                         #   HuggingFace cache for dslim/bert-base-NER (auto-downloaded)
 │   │
-│   └── reports/                              # Generated PDF reports output directory
-│
-└── frontend/
-    ├── package.json                 # Bun/npm dependencies
-    ├── next.config.ts               # Next.js configuration
-    ├── tsconfig.json                # TypeScript configuration
-    ├── postcss.config.mjs           # PostCSS (Tailwind) config
-    ├── eslint.config.mjs            # ESLint configuration
-    ├── app/
-    │   ├── layout.tsx               # Root layout (Geist font, global styles)
-    │   ├── page.tsx                 # Home page
-    │   ├── globals.css              # Tailwind CSS + theme variables
-    │   └── favicon.ico              # App icon
-    └── public/                      # Static assets
+│   └── reports/                              # Generated PDF reports output directory (also uploaded to S3 if configured)
+
 ```
 
 ---
@@ -181,6 +169,31 @@ Stores registered user accounts.
 **Relationships:** Referenced by `scan_history`, `resumes`, `match_history`, `scam_reports`, `report_votes`.
 
 ---
+
+## PDF Report Storage (Local + S3)
+
+Generated PDF reports are generated in memory and **only stored in Amazon S3** via `boto3`:
+
+- **Cloud path:**  
+  `s3://<AWS_S3_REPORTS_BUCKET>/<AWS_S3_REPORTS_PREFIX?>/(scan-reports|match-reports)/YYYY/MM/DD/<filename>.pdf`
+
+S3 uploads are handled by `report_generator.py` and are **required**:
+
+- If `AWS_S3_REPORTS_BUCKET` is missing or the S3 upload fails, report generation raises an error and the HTTP endpoint returns `500` with no URL.
+- API endpoints (`/api/reports/generate-scan-pdf`, `/api/reports/generate-match-pdf`) return a JSON response with a **pre‑signed S3 download URL** instead of streaming a local file.
+
+To configure S3:
+
+- **Environment variables (required/optional):**
+  - `AWS_S3_REPORTS_BUCKET` **or** `AWS_S3_BUCKET_NAME` — **required** S3 bucket name where reports are stored
+  - `AWS_S3_REPORTS_PREFIX` — _optional_ prefix inside the bucket, e.g. `ai-job-scam-detector`  
+    (final keys look like `ai-job-scam-detector/scan-reports/2026/03/18/...`)
+  - `AWS_S3_ENDPOINT` — _optional_ custom S3 endpoint (e.g. Supabase S3-compatible storage)
+- **AWS credentials/region:**
+  - Use the standard AWS provider chain: environment variables, shared credentials file, or IAM role.
+  - Region is resolved from `AWS_REGION` / `AWS_DEFAULT_REGION` or your AWS config.
+
+No secrets are committed to the repo — set credentials and bucket details in your local `.env`/deployment environment or your deployment platform.
 
 ### Table 2: `scan_history`
 

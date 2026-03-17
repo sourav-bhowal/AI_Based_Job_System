@@ -15,10 +15,6 @@ backend/.venv/
 # Frontend files not needed for backend image build
 frontend/
 
-# Local runtime artifacts
-backend/database/
-backend/reports/
-
 # Large training datasets not needed in runtime image
 backend/data/
 
