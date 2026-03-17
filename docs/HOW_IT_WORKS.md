@@ -53,7 +53,7 @@ Imagine you're a job seeker. You find a job posting online. How do you know if i
   ├──────────────────────────────────────────────┤
   │  Layer 4: NER (Named Entity Recognition)     │
   │  Finds company names, locations, salaries    │
-  │  in the text using spaCy NLP                 │
+  │  using dslim/bert-base-NER (BERT transformer)│
   ├──────────────────────────────────────────────┤
   │  Layer 5: Salary Anomaly Detection           │
   │  RF Regressor predicts expected salary,      │
@@ -319,9 +319,9 @@ On top of the ML explanation, we also scan for **known scam patterns** using reg
 | **Generic Email**        | "send CV to hr@gmail.com"                | 🟡 Medium   |
 | **Vague Description**    | "various tasks and activities"           | 🟢 Low      |
 
-### Step 4: NER Entity Analysis (New!)
+### Step 4: NER Entity Analysis
 
-We also check what spaCy's NER found:
+We also check what the BERT NER model found:
 
 - **No company name detected?** → Suspicious (legit postings always mention the company)
 - **No location?** → Slightly suspicious
@@ -404,19 +404,19 @@ NER is when a computer reads text and identifies **real-world entities** — per
 
 ```
 Input:  "Google is hiring a Software Engineer in New York for $150,000"
-Output: Google → ORG (Organization)
-        New York → GPE (Geopolitical Entity = city/country)
-        $150,000 → MONEY
+Output: Google   → ORG  (Organization — detected by BERT)
+        New York → LOC  (Location — detected by BERT; also exposed as GPE for backward compat)
+        $150,000 → MONEY (extracted by regex — BERT NER does not cover monetary values)
 ```
 
 ### How Does It Work?
 
-We use **spaCy**, a popular NLP library. The model `en_core_web_sm` was trained on millions of English documents and learned to recognize entities based on:
+We use **`dslim/bert-base-NER`**, a BERT-base model fine-tuned on the CoNLL-2003 NER benchmark (~92% F1). It's loaded via the HuggingFace `transformers` pipeline and runs on GPU if available, otherwise CPU. The model understands entities based on:
 
-- Word patterns ("Inc.", "Ltd." usually follow company names)
-- Capitalization (proper nouns are likely entities)
-- Context (words after "in" are often locations)
-- Grammar rules (names follow certain syntactic positions)
+- **Bidirectional context:** BERT reads the entire sentence simultaneously in both directions, so "Apple" in "Apple released a new phone" vs "I ate an apple" is understood differently
+- **Subword tokenization:** Complex words, names, and tech terms are handled via WordPiece tokenization
+- **CoNLL-2003 fine-tuning:** Trained on thousands of annotated news documents for high-precision entity recognition
+- **Long text chunking:** Texts longer than ~1500 characters are automatically split at sentence boundaries to respect BERT's 512-token limit
 
 ### Why Did We Add NER?
 
@@ -436,22 +436,24 @@ We use **spaCy**, a popular NLP library. The model `en_core_web_sm` was trained 
 
 ### Where NER Is Used
 
-| Module                | What NER Does There                                              |
-| --------------------- | ---------------------------------------------------------------- |
-| **scraper.py**        | Extracts companies, locations, money from scraped job pages      |
-| **explainer.py**      | Adds entity-based scam signals ("no company detected")           |
-| **resume_parser.py**  | Detects candidate name, past employers, locations                |
-| **company_scorer.py** | Validates if a company name is recognized as a real organization |
+All four modules call `ner_extractor.py`, which runs `dslim/bert-base-NER` via HuggingFace (lazy-loaded, shared pipeline instance).
 
-### Why spaCy and Not Something Else?
+| Module                | What NER Does There                                                                           |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| **scraper.py**        | Extracts ORG, LOC, MONEY, DATE entities from scraped job pages                                |
+| **explainer.py**      | Adds entity-based scam signals ("no company detected", "no location", "high monetary value")  |
+| **resume_parser.py**  | Detects candidate name (first PER), past employers (ORG), locations (LOC)                     |
+| **company_scorer.py** | Validates if a company name is recognized as ORG by BERT (+10 points to trust heuristic)      |
 
-| Option                    | Why Chosen/Not                                                  |
-| ------------------------- | --------------------------------------------------------------- |
-| **spaCy** ✅              | Fast, offline, free, pre-trained models, perfect for production |
-| NLTK NER                  | Slower, less accurate, requires more setup                      |
-| Hugging Face Transformers | More accurate but HUGE models (500MB+), needs GPU, overkill     |
-| Google Cloud NLP API      | Costs money per API call, needs internet                        |
-| Custom training           | Would need thousands of labeled job postings — not worth it     |
+### Why `dslim/bert-base-NER` and Not Something Else?
+
+| Option                                 | Why Chosen/Not                                                                                |
+| -------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **dslim/bert-base-NER (HuggingFace)** ✅ | ~92% F1 on CoNLL-2003, eliminates false-positive locations (e.g. "React", "Node.js" are no longer flagged as places), offline after first download, free |
+| spaCy `en_core_web_sm`                 | Faster (~10ms vs ~200ms) but CNN-based (~85% F1) — more false positives on tech job text    |
+| NLTK NER                               | Slower, less accurate, requires more setup                                                    |
+| Google Cloud NLP API                   | Costs money per API call, requires internet connection on every request                       |
+| Custom training                        | Would require thousands of manually labeled job postings — not worth the effort               |
 
 ---
 
@@ -501,9 +503,9 @@ Patterns like: "5+ years experience", "experience of 3 years"
 
 Email, phone (international formats), LinkedIn URL, GitHub URL
 
-**5-7. NER Entities (spaCy)**
+**5-7. NER Entities (BERT — `dslim/bert-base-NER`)**
 
-Name (first PERSON entity), past employers (ORG), locations (GPE)
+Name (first PER entity), past employers (ORG), locations (LOC)
 
 ### Why Regex AND NER?
 
@@ -740,7 +742,7 @@ No single check can definitively say a company is legitimate or fake. So we comb
 | Name too short (< 3 chars)                          | Warning    |
 | Contains "work from home", "earn money"             | -20 points |
 | Has suffix like "Ltd", "Inc", "LLC", "Technologies" | +15 points |
-| Recognized as ORG by spaCy NER                      | +10 points |
+| Recognized as ORG by BERT NER (`dslim/bert-base-NER`)| +10 points |
 
 ### Signal 4: Community Reports (30%)
 
@@ -948,7 +950,7 @@ Actual  Scam  [  TP  |  FN  ]    TP = True Positive (correctly caught scam)
 | **Overfitting**       | Model memorizes training data instead of learning patterns     | Like hardcoding test cases instead of writing general logic  |
 | **Stratified Split**  | Train/test split that preserves label ratios                   | Like ensuring dev/prod databases have same data distribution |
 | **NER**               | Named Entity Recognition — finding real-world entities in text | Like auto-tagging names and places in a blog post            |
-| **spaCy**             | Python NLP library for text processing and NER                 | Like jQuery but for text processing                          |
+| **HuggingFace**       | ML model hub and `transformers` library for BERT, RoBERTa, etc | Like npm but for AI models                                   |
 | **Tokenizer**         | Splits text into individual words/tokens                       | Like `.split(" ")` but smarter                               |
 | **Scam Indicator**    | A word or pattern that increases scam probability              | Like a red flag rule                                         |
 | **ATS**               | Applicant Tracking System — auto-screens resumes               | Like a form validator that rejects incomplete applications   |

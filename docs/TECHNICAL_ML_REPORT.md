@@ -108,19 +108,30 @@ The model's prediction serves as the "expected salary" baseline. Anomaly scoring
 
 ---
 
-## 5. Named Entity Recognition — Transfer Learning
+## 5. Named Entity Recognition — BERT Transformer
 
-Entity extraction leverages **spaCy's `en_core_web_sm`** pre-trained pipeline — a CNN-based NER model trained on OntoNotes 5.0 (1,745K tokens). The model recognizes 18 entity types; we utilize 7 for job scam analysis:
+Entity extraction uses **`dslim/bert-base-NER`** — a BERT-base model fine-tuned on CoNLL-2003 (~92% F1 on the test set). It is loaded via the HuggingFace `transformers` pipeline with `aggregation_strategy="simple"` for span-level entity grouping. The model runs on GPU when available, CPU otherwise (lazy-loaded on first request, shared pipeline instance).
 
-| Entity Type         | Label   | Application                                                   |
-| ------------------- | ------- | ------------------------------------------------------------- |
-| Organization        | ORG     | Company name extraction, legitimacy validation                |
-| Geopolitical Entity | GPE     | City/country extraction, "no location" scam signal            |
-| Location            | LOC     | Non-GPE locations (regions, landmarks) — combined with GPE    |
-| Monetary Value      | MONEY   | Salary entity detection, high-value scam signal               |
-| Person              | PERSON  | Resume candidate name extraction, excessive-names scam signal |
-| Date                | DATE    | Timeline extraction from resumes (employment periods)         |
-| Product             | PRODUCT | Technology/product name extraction from resumes               |
+**Why BERT over spaCy `en_core_web_sm` (previous approach):**
+The CNN-based spaCy model (~85% F1 on OntoNotes 5.0) produced frequent false-positive location entities for technology names common in job postings (e.g., "React", "Node.js", "Svenska" classified as GPE/LOC). The BERT transformer's bidirectional context eliminates this class of error and improves overall precision on domain-specific text.
+
+**Entity types from `dslim/bert-base-NER`** (BERT labels → internal mapping):
+
+| BERT Label | Internal Label | Application                                                    |
+| ---------- | -------------- | -------------------------------------------------------------- |
+| PER        | PERSON         | Candidate name extraction; excessive-names scam signal (>5)    |
+| ORG        | ORG            | Company name extraction; legitimacy validation                 |
+| LOC        | LOC / GPE      | Geographic location extraction; "no location" scam signal      |
+| MISC       | MISC           | Nationalities, languages, events; skill-hint extraction        |
+
+**Additional entity types extracted via regex** (BERT NER does not cover financial/temporal values):
+
+| Regex Type | Application                                                                    |
+| ---------- | ------------------------------------------------------------------------------ |
+| MONEY      | Monetary value detection; high-value scam signal (>500,000 any currency)       |
+| DATE       | Timeline extraction from resumes (employment periods, graduation dates)        |
+
+**Text length handling:** BERT has a 512-token limit. The extractor splits inputs longer than ~1500 characters at sentence boundaries into overlapping chunks, de-duplicating entities across chunks.
 
 NER outputs are integrated into 4 downstream modules: scraping (entity enrichment), explanation (entity-based scam signals), resume parsing (contact/employer extraction), and company scoring (ORG entity validation adding +10 to trust heuristic).
 
