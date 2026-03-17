@@ -242,6 +242,10 @@ export interface CompanyCheckResult {
   trust_score: number;
   trust_level: string;
   breakdown: Record<string, number>;
+  confidence?: "high" | "medium" | "low";
+  confidence_score?: number;
+  signal_reliability?: Record<string, number>;
+  effective_weights?: Record<string, number>;
   details: CompanyDetail[];
   community_data: {
     total_reports: number;

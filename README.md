@@ -141,8 +141,6 @@ ai-job-scam-detector/
 │   │   ├── model_metrics.json                #   All 5 model metrics + best model info
 │   │   ├── ai_detector_bert/                 #   Fine-tuned RoBERTa model (+ checkpoint-500/, checkpoint-1000/)
 │   │   └── ner_bert/                         #   HuggingFace cache for dslim/bert-base-NER (auto-downloaded)
-│   │
-│   └── reports/                              # Generated PDF reports output directory (also uploaded to S3 if configured)
 
 ```
 
