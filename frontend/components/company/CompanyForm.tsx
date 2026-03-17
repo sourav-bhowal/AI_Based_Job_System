@@ -106,43 +106,36 @@ export default function CompanyForm() {
             </div>
           </Card>
 
-          {result.domain_info && (
+          {result.details && result.details.length > 0 && (
             <Card>
               <h3 className="mb-4 text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-subtle)] text-[var(--accent)]">
                   <Globe className="h-4 w-4" />
                 </div>
-                Domain Diagnostics
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4 text-center">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Age</div>
-                  <div className="text-lg font-bold text-[var(--foreground)]">{result.domain_info.age_years ? `${result.domain_info.age_years} Years` : "Unknown"}</div>
-                </div>
-                <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4 text-center">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Registrar</div>
-                  <div className="text-sm font-bold text-[var(--foreground)] truncate px-2">{result.domain_info.registrar || "—"}</div>
-                </div>
-                <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4 text-center">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Registered</div>
-                  <div className="text-sm font-bold text-[var(--foreground)]">{result.domain_info.creation_date || "—"}</div>
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {result.warnings?.length > 0 && (
-            <Card variant="warning" className="border-[var(--warning)]/30">
-              <h3 className="mb-3 text-lg font-bold text-[var(--warning)] flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" /> Active Warnings
+                Detailed Findings
               </h3>
               <ul className="space-y-2">
-                {result.warnings.map((w, i) => (
-                  <li key={i} className="text-sm font-medium text-[var(--warning)]/90 flex items-start gap-2 bg-[var(--background)] p-3 rounded-lg border border-[var(--warning)]/10">
-                    <span className="text-[var(--warning)] mt-0.5">•</span> {w}
+                {result.details.map((d, i) => (
+                  <li key={i} className={`text-sm font-medium flex items-start gap-2 p-3 rounded-lg border ${
+                    d.type === "danger" ? "border-[var(--danger)]/20 bg-[var(--danger-subtle)] text-[var(--danger)]"
+                    : d.type === "warning" ? "border-[var(--warning)]/20 bg-[var(--warning-subtle)] text-[var(--warning)]"
+                    : "border-[var(--success)]/20 bg-[var(--success-subtle)] text-[var(--success)]"
+                  }`}>
+                    <span className="mt-0.5">{d.type === "danger" ? "⚠" : d.type === "warning" ? "⚡" : "✓"}</span> {d.message}
                   </li>
                 ))}
               </ul>
+            </Card>
+          )}
+
+          {result.community_data?.is_blacklisted && (
+            <Card variant="warning" className="border-[var(--danger)]/30">
+              <h3 className="mb-3 text-lg font-bold text-[var(--danger)] flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" /> Blacklisted Company
+              </h3>
+              <p className="text-sm text-[var(--danger)]/90">
+                This company has been blacklisted by the community with {result.community_data.total_reports} report(s).
+              </p>
             </Card>
           )}
         </div>

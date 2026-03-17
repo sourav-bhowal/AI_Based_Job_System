@@ -233,7 +233,7 @@ export default function ResumeUploader({
                     <ul className="space-y-2">
                       {matchResult.strengths.map((s,i)=>(
                          <li key={i} className="text-sm text-[var(--muted)] flex items-start gap-2">
-                          <span className="text-[var(--success)] mt-0.5">•</span> <span>{s}</span>
+                          <span className="text-[var(--success)] mt-0.5">•</span> <span>{s.message}</span>
                         </li>
                       ))}
                     </ul>
@@ -247,7 +247,7 @@ export default function ResumeUploader({
                     <ul className="space-y-2">
                       {matchResult.weaknesses.map((w,i)=>(
                         <li key={i} className="text-sm text-[var(--muted)] flex items-start gap-2">
-                          <span className="text-[var(--warning)] mt-0.5">•</span> <span>{w}</span>
+                          <span className="text-[var(--warning)] mt-0.5">•</span> <span>{w.message}</span>
                         </li>
                       ))}
                     </ul>
@@ -263,7 +263,7 @@ export default function ResumeUploader({
                   <ul className="space-y-3">
                     {matchResult.recommendations.map((r,i)=>(
                       <li key={i} className="text-sm text-[var(--muted)] flex items-start gap-3 rounded-lg bg-[var(--accent-subtle)]/30 p-3">
-                        <BookOpen className="h-4 w-4 shrink-0 text-[var(--accent)] mt-0.5" /> <span>{r}</span>
+                        <BookOpen className="h-4 w-4 shrink-0 text-[var(--accent)] mt-0.5" /> <span>{r.title} — {r.platform}</span>
                       </li>
                     ))}
                   </ul>

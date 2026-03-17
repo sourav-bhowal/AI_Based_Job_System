@@ -124,7 +124,7 @@ export default function ScannerForm() {
                   {result.explanation.prediction.toUpperCase()}
                 </span>
                 <span className="text-sm text-[var(--muted)] ml-auto">
-                  {typeof result.explanation.scam_probability === "number" ? (result.explanation.scam_probability * 100).toFixed(1) : result.explanation.scam_probability}% scam probability
+                  {typeof result.explanation.scam_probability === "number" ? result.explanation.scam_probability.toFixed(1) : result.explanation.scam_probability}% scam probability
                 </span>
               </div>
 
