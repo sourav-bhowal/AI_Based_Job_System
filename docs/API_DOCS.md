@@ -387,11 +387,11 @@ Match a previously uploaded resume against a job posting. Returns detailed skill
 > [!IMPORTANT]
 > You must provide either `job_url` or `job_text`. If both are provided, `job_url` takes priority.
 >
-> The similarity computation method depends on which module is configured:
-> - **Default** (`resume_matcher.py`): TF-IDF cosine similarity
-> - **Upgrade** (`resume_matcher_semantic.py`): Sentence-BERT semantic embeddings
+> The active module is `resume_matcher_bert.py` (Sentence-BERT). It provides two layers of SBERT intelligence:
+> - **Document similarity** — encodes full resume + job text (captures overall field alignment)
+> - **Fuzzy skill matching** — encodes individual skill names; job-required skills not found verbatim are matched against resume skills by SBERT similarity. Skills with similarity ≥ 0.72 appear as `"status": "partial_match"` in strengths (not as gaps). Skills below that threshold appear as `"status": "missing"` in weaknesses.
 >
-> When using the Sentence-BERT option, the response includes an additional `"similarity_method": "sentence_bert"` field.
+> Response always includes `"similarity_method": "sentence_bert"` (falls back to `"tfidf_fallback"` if PyTorch is unavailable).
 
 **Success Response `200`:**
 
@@ -399,17 +399,18 @@ Match a previously uploaded resume against a job posting. Returns detailed skill
 {
   "match_score": 72.5,
   "strengths": [
-    "Strong Python skills matching job requirements",
-    "Cloud experience with AWS"
+    { "skill": "python",  "status": "match",         "message": "Your resume includes 'python' which is required for this role" },
+    { "skill": "pytorch", "status": "partial_match",  "bridge_skill": "pytorch", "similarity": 87, "message": "'tensorflow' not listed, but your 'pytorch' experience covers ~87% of it — a short bridge course should close this gap" }
   ],
   "weaknesses": [
-    "Missing Kubernetes experience",
-    "No TypeScript skills detected"
+    { "skill": "kubernetes", "status": "missing", "message": "The job requires 'kubernetes' and it's not covered by your current skills", "priority": "high" }
   ],
   "recommendations": [
-    "Consider learning Kubernetes for container orchestration",
-    "Add TypeScript to your toolkit"
+    { "skill": "kubernetes", "title": "Kubernetes for the Absolute Beginners", "platform": "Udemy", "url": "https://...", "level": "Beginner" }
   ],
+  "matching_skills_count": 3,
+  "partial_match_skills_count": 2,
+  "missing_skills_count": 1,
   "skill_match_details": {
     "matched_skills": ["python", "aws", "react"],
     "missing_skills": ["kubernetes", "typescript"],
