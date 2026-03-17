@@ -1,21 +1,38 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { scanUrlAction, scanTextAction } from "@/lib/actions/scanner";
+import { useActionState, useState, useTransition } from "react";
+import { scanUrlAction, scanTextAction, downloadScanPdfAction } from "@/lib/actions/scanner";
 import type { ScanResult } from "@/lib/types";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import ErrorDisplay from "@/components/ErrorDisplay";
 import RiskBadge from "@/components/RiskBadge";
 import Card from "@/components/Card";
-import { Link as LinkIcon, FileText, BrainCircuit, Flag, AlertTriangle, CheckCircle2, IndianRupee } from "lucide-react";
+import { Link as LinkIcon, FileText, BrainCircuit, Flag, AlertTriangle, CheckCircle2, IndianRupee, FileDown } from "lucide-react";
 
 type Tab = "url" | "text";
 
 export default function ScannerForm() {
   const [activeTab, setActiveTab] = useState<Tab>("url");
   const [isPending, startTransition] = useTransition();
+  const [isDownloadingPdf, startPdfDownload] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ScanResult | null>(null);
+
+  const handleDownloadPdf = async (url: string) => {
+    startPdfDownload(async () => {
+      const res = await downloadScanPdfAction(url);
+      if (res.success && res.pdfBase64) {
+        const link = document.createElement("a");
+        link.href = `data:application/pdf;base64,${res.pdfBase64}`;
+        link.download = "scan_report.pdf";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        alert(res.error || "Failed to download PDF.");
+      }
+    });
+  };
 
   async function clientAction(formData: FormData) {
     setError(null);
@@ -128,6 +145,31 @@ export default function ScannerForm() {
                 </span>
               </div>
 
+              {result.explanation.ai_detection && (
+                <div className="mb-6 rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--muted)] mb-3">AI Detection Analysis</h4>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold ${
+                      result.explanation.ai_detection.verdict === "likely_ai"
+                        ? "bg-[var(--warning-subtle)] text-[var(--warning)] border border-[var(--warning)]/20"
+                        : result.explanation.ai_detection.verdict === "likely_human"
+                        ? "bg-[var(--success-subtle)] text-[var(--success)] border border-[var(--success)]/20"
+                        : "bg-[var(--muted)]/20 text-[var(--muted)] border border-[var(--card-border)]"
+                    }`}>
+                      {result.explanation.ai_detection.verdict === "likely_ai" ? "AI-Generated" : result.explanation.ai_detection.verdict === "likely_human" ? "Human-Written" : "Uncertain"}
+                    </span>
+                    <span className="text-sm font-semibold text-[var(--foreground)]">
+                      {(result.explanation.ai_detection.ai_probability * 100).toFixed(1)}% AI Probability
+                    </span>
+                  </div>
+                  {result.explanation.ai_detection.method && (
+                    <p className="text-sm text-[var(--muted)] leading-relaxed mt-2 border-t border-[var(--card-border)]/50 pt-2">
+                      Detection Method: {result.explanation.ai_detection.method}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {result.explanation.red_flags?.length > 0 && (
                 <div className="mb-6">
                   <h4 className="mb-3 text-sm font-semibold text-[var(--foreground)] flex items-center gap-1.5 uppercase tracking-wide">
@@ -213,6 +255,24 @@ export default function ScannerForm() {
                 )}
               </div>
             </Card>
+          )}
+
+          {activeTab === "url" && (
+            <div className="flex justify-end pt-4 pb-8">
+              <button
+                type="button"
+                onClick={() => {
+                   const form = document.querySelector('form') as HTMLFormElement;
+                   const urlInput = form.querySelector('[name="scan-url"]') as HTMLInputElement;
+                   if (urlInput?.value) handleDownloadPdf(urlInput.value);
+                }}
+                disabled={isDownloadingPdf}
+                className="flex items-center gap-2 rounded-xl border border-[var(--accent)]/30 bg-[var(--background)] px-5 py-2.5 text-sm font-semibold text-[var(--accent)] shadow-[var(--shadow-sm)] transition-all duration-200 hover:bg-[var(--accent-subtle)] disabled:opacity-50"
+              >
+                <FileDown className="h-4 w-4" />
+                {isDownloadingPdf ? "Generating PDF..." : "Download Full PDF Report"}
+              </button>
+            </div>
           )}
         </div>
       )}

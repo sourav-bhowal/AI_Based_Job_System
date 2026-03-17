@@ -1,6 +1,6 @@
 "use server";
 
-import { scanUrlSSR, scanTextSSR } from "@/lib/api-server";
+import { scanUrlSSR, scanTextSSR, generateScanPdfSSR } from "@/lib/api-server";
 import { ScanResult } from "@/lib/types";
 
 export type ScanActionState = 
@@ -18,7 +18,11 @@ export async function scanUrlAction(
     const data = await scanUrlSSR(url);
     return { success: true, data };
   } catch (error: any) {
-    return { success: false, error: error.message || "Failed to scan URL" };
+    let msg = error.message || "Failed to scan URL";
+    if (msg.includes("Playwright") || msg.toLowerCase().includes("unable to fetch") || msg.includes("Timeout")) {
+      msg = "Scraping blocked by the host site (e.g., LinkedIn). Please paste the job text manually.";
+    }
+    return { success: false, error: msg };
   }
 }
 
@@ -35,5 +39,16 @@ export async function scanTextAction(
     return { success: true, data };
   } catch (error: any) {
     return { success: false, error: error.message || "Failed to scan text" };
+  }
+}
+
+export async function downloadScanPdfAction(url: string) {
+  try {
+    const blob = await generateScanPdfSSR(url);
+    const arrayBuffer = await blob.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    return { success: true, pdfBase64: base64 };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to generate PDF" };
   }
 }

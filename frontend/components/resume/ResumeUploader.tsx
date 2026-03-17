@@ -2,12 +2,12 @@
 
 import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { uploadResumeAction, matchResumeAction } from "@/lib/actions/resume";
+import { uploadResumeAction, matchResumeAction, downloadMatchPdfAction } from "@/lib/actions/resume";
 import type { ResumeListItem, ResumeUploadResult, MatchResult } from "@/lib/types";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import ErrorDisplay from "@/components/ErrorDisplay";
 import Card from "@/components/Card";
-import { UploadCloud, CheckCircle2, FileText, Target, AlertTriangle, Lightbulb, BookOpen } from "lucide-react";
+import { UploadCloud, CheckCircle2, FileText, Target, AlertTriangle, Lightbulb, BookOpen, FileDown } from "lucide-react";
 
 export default function ResumeUploader({
   initialResumes,
@@ -34,6 +34,35 @@ export default function ResumeUploader({
   const [isMatching, startMatch] = useTransition();
   const [matchError, setMatchError] = useState<string | null>(null);
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  
+  const [isDownloadingPdf, startPdfDownload] = useTransition();
+
+  const handleDownloadPdf = () => {
+    if (!selectedResumeId) return;
+    
+    startPdfDownload(async () => {
+      const form = document.querySelector('form') as HTMLFormElement;
+      const jobUrlInput = form?.querySelector('[name="job_url"]') as HTMLInputElement;
+      const jobTextInput = form?.querySelector('[name="job_text"]') as HTMLTextAreaElement;
+      
+      const res = await downloadMatchPdfAction(
+        selectedResumeId,
+        jobUrlInput?.value || undefined,
+        jobTextInput?.value || undefined
+      );
+      
+      if (res.success && res.pdfBase64) {
+        const link = document.createElement("a");
+        link.href = `data:application/pdf;base64,${res.pdfBase64}`;
+        link.download = "match_report.pdf";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        alert(res.error || "Failed to download PDF.");
+      }
+    });
+  };
 
   // Handle direct file select for upload
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -269,6 +298,18 @@ export default function ResumeUploader({
                   </ul>
                 </div>
               )}
+
+              <div className="mt-8 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleDownloadPdf}
+                  disabled={isDownloadingPdf}
+                  className="flex items-center gap-2 rounded-xl border border-[var(--accent)]/30 bg-[var(--background)] px-5 py-2.5 text-sm font-semibold text-[var(--accent)] shadow-[var(--shadow-sm)] transition-all duration-200 hover:bg-[var(--accent-subtle)] disabled:opacity-50"
+                >
+                  <FileDown className="h-4 w-4" />
+                  {isDownloadingPdf ? "Generating PDF..." : "Download Full PDF Report"}
+                </button>
+              </div>
             </div>
           )}
         </Card>
