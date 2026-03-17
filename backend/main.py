@@ -32,7 +32,7 @@ from risk_engine import compute_risk
 from model import predict_scam
 from explainer import explain_prediction
 from resume_parser import parse_resume
-from resume_matcher_semantic import compute_match_score
+from resume_matcher_bert import compute_match_score
 # from resume_matcher import compute_match_score
 from salary_predictor import predict_salary_anomaly
 from company_scorer import compute_company_trust_score

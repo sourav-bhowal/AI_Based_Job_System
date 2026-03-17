@@ -2,5 +2,6 @@
 /.vscode
 /data
 scam_detector.db
+ai_detector_bert
 .env
 /__pycache__
