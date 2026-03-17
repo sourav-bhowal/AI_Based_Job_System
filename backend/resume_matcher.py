@@ -98,130 +98,130 @@ def extract_job_requirements(job_text: str) -> dict:
     }
 
 
-def compute_match_score(resume_data: dict, job_text: str) -> dict:
-    """
-    Compute match score between a resume and job posting.
+# def compute_match_score(resume_data: dict, job_text: str) -> dict:
+#     """
+#     Compute match score between a resume and job posting.
     
-    Uses TF-IDF cosine similarity for overall match and
-    skill-by-skill comparison for detailed breakdown.
+#     Uses TF-IDF cosine similarity for overall match and
+#     skill-by-skill comparison for detailed breakdown.
     
-    Returns:
-        dict with match_score, strengths, weaknesses, recommendations, 
-        training_roadmap, ats_score
-    """
-    resume_text = resume_data["text"]
-    resume_skills = resume_data["skills"]
+#     Returns:
+#         dict with match_score, strengths, weaknesses, recommendations, 
+#         training_roadmap, ats_score
+#     """
+#     resume_text = resume_data["text"]
+#     resume_skills = resume_data["skills"]
 
-    # --- 1. TF-IDF Cosine Similarity Score ---
-    vectorizer = TfidfVectorizer(stop_words="english", max_features=3000)
-    try:
-        tfidf_matrix = vectorizer.fit_transform([resume_text, job_text])
-        similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
-    except:
-        similarity = 0.0
+#     # --- 1. TF-IDF Cosine Similarity Score ---
+#     vectorizer = TfidfVectorizer(stop_words="english", max_features=3000)
+#     try:
+#         tfidf_matrix = vectorizer.fit_transform([resume_text, job_text])
+#         similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+#     except:
+#         similarity = 0.0
 
-    # --- 2. Skill-by-Skill Matching ---
-    job_requirements = extract_job_requirements(job_text)
-    job_skills = job_requirements["skills"]
+#     # --- 2. Skill-by-Skill Matching ---
+#     job_requirements = extract_job_requirements(job_text)
+#     job_skills = job_requirements["skills"]
 
-    # Flatten skills
-    resume_skill_set = set()
-    for category_skills in resume_skills.values():
-        resume_skill_set.update(s.lower() for s in category_skills)
+#     # Flatten skills
+#     resume_skill_set = set()
+#     for category_skills in resume_skills.values():
+#         resume_skill_set.update(s.lower() for s in category_skills)
 
-    job_skill_set = set()
-    for category_skills in job_skills.values():
-        job_skill_set.update(s.lower() for s in category_skills)
+#     job_skill_set = set()
+#     for category_skills in job_skills.values():
+#         job_skill_set.update(s.lower() for s in category_skills)
 
-    if not job_skill_set:
-        # If we couldn't extract specific skills, use a broader match
-        skill_match_ratio = similarity
-    else:
-        matching_skills = resume_skill_set.intersection(job_skill_set)
-        missing_skills = job_skill_set - resume_skill_set
-        extra_skills = resume_skill_set - job_skill_set
-        skill_match_ratio = len(matching_skills) / len(job_skill_set) if job_skill_set else 0
+#     if not job_skill_set:
+#         # If we couldn't extract specific skills, use a broader match
+#         skill_match_ratio = similarity
+#     else:
+#         matching_skills = resume_skill_set.intersection(job_skill_set)
+#         missing_skills = job_skill_set - resume_skill_set
+#         extra_skills = resume_skill_set - job_skill_set
+#         skill_match_ratio = len(matching_skills) / len(job_skill_set) if job_skill_set else 0
 
-    # --- 3. Combined Match Score ---
-    match_score = round((0.4 * similarity + 0.6 * skill_match_ratio) * 100, 1)
-    match_score = min(match_score, 100)  # Cap at 100
+#     # --- 3. Combined Match Score ---
+#     match_score = round((0.4 * similarity + 0.6 * skill_match_ratio) * 100, 1)
+#     match_score = min(match_score, 100)  # Cap at 100
 
-    # --- 4. Strengths (matching skills) ---
-    strengths = []
-    if job_skill_set:
-        matching = resume_skill_set.intersection(job_skill_set)
-        for skill in sorted(matching):
-            strengths.append({
-                "skill": skill,
-                "status": "match",
-                "message": f"Your resume includes '{skill}' which is required for this role"
-            })
+#     # --- 4. Strengths (matching skills) ---
+#     strengths = []
+#     if job_skill_set:
+#         matching = resume_skill_set.intersection(job_skill_set)
+#         for skill in sorted(matching):
+#             strengths.append({
+#                 "skill": skill,
+#                 "status": "match",
+#                 "message": f"Your resume includes '{skill}' which is required for this role"
+#             })
     
-    if resume_data.get("experience_years", 0) > 0:
-        strengths.append({
-            "skill": "experience",
-            "status": "match",
-            "message": f"You have {resume_data['experience_years']} years of experience"
-        })
+#     if resume_data.get("experience_years", 0) > 0:
+#         strengths.append({
+#             "skill": "experience",
+#             "status": "match",
+#             "message": f"You have {resume_data['experience_years']} years of experience"
+#         })
 
-    if resume_data.get("education"):
-        strengths.append({
-            "skill": "education",
-            "status": "match",
-            "message": f"Education: {', '.join(resume_data['education'][:2])}"
-        })
+#     if resume_data.get("education"):
+#         strengths.append({
+#             "skill": "education",
+#             "status": "match",
+#             "message": f"Education: {', '.join(resume_data['education'][:2])}"
+#         })
 
-    # --- 5. Weaknesses (missing skills) ---
-    weaknesses = []
-    if job_skill_set:
-        missing = job_skill_set - resume_skill_set
-        for skill in sorted(missing):
-            weaknesses.append({
-                "skill": skill,
-                "status": "missing",
-                "message": f"The job requires '{skill}' but it's not found in your resume",
-                "priority": "high" if skill in COURSE_RECOMMENDATIONS else "medium"
-            })
+#     # --- 5. Weaknesses (missing skills) ---
+#     weaknesses = []
+#     if job_skill_set:
+#         missing = job_skill_set - resume_skill_set
+#         for skill in sorted(missing):
+#             weaknesses.append({
+#                 "skill": skill,
+#                 "status": "missing",
+#                 "message": f"The job requires '{skill}' but it's not found in your resume",
+#                 "priority": "high" if skill in COURSE_RECOMMENDATIONS else "medium"
+#             })
 
-    # --- 6. Course Recommendations for Missing Skills ---
-    recommendations = []
-    if job_skill_set:
-        missing = job_skill_set - resume_skill_set
-        for skill in sorted(missing):
-            if skill in COURSE_RECOMMENDATIONS:
-                for course in COURSE_RECOMMENDATIONS[skill]:
-                    recommendations.append({
-                        "skill": skill,
-                        **course
-                    })
-            else:
-                recommendations.append({
-                    "skill": skill,
-                    "title": f"Learn {skill.title()}",
-                    "platform": "YouTube / Google",
-                    "url": f"https://www.youtube.com/results?search_query=learn+{skill.replace(' ', '+')}",
-                    "level": "Beginner"
-                })
+#     # --- 6. Course Recommendations for Missing Skills ---
+#     recommendations = []
+#     if job_skill_set:
+#         missing = job_skill_set - resume_skill_set
+#         for skill in sorted(missing):
+#             if skill in COURSE_RECOMMENDATIONS:
+#                 for course in COURSE_RECOMMENDATIONS[skill]:
+#                     recommendations.append({
+#                         "skill": skill,
+#                         **course
+#                     })
+#             else:
+#                 recommendations.append({
+#                     "skill": skill,
+#                     "title": f"Learn {skill.title()}",
+#                     "platform": "YouTube / Google",
+#                     "url": f"https://www.youtube.com/results?search_query=learn+{skill.replace(' ', '+')}",
+#                     "level": "Beginner"
+#                 })
 
-    # --- 7. ATS (Applicant Tracking System) Score ---
-    ats_score = compute_ats_score(resume_data, job_text)
+#     # --- 7. ATS (Applicant Tracking System) Score ---
+#     ats_score = compute_ats_score(resume_data, job_text)
 
-    # --- 8. Training Roadmap ---
-    roadmap = generate_training_roadmap(weaknesses, recommendations)
+#     # --- 8. Training Roadmap ---
+#     roadmap = generate_training_roadmap(weaknesses, recommendations)
 
-    return {
-        "match_score": match_score,
-        "cosine_similarity": round(similarity * 100, 1),
-        "skill_match_percentage": round(skill_match_ratio * 100, 1),
-        "total_job_skills": len(job_skill_set),
-        "matching_skills_count": len(resume_skill_set.intersection(job_skill_set)) if job_skill_set else 0,
-        "missing_skills_count": len(job_skill_set - resume_skill_set) if job_skill_set else 0,
-        "strengths": strengths,
-        "weaknesses": weaknesses,
-        "recommendations": recommendations[:15],  # Limit to top 15
-        "ats_score": ats_score,
-        "training_roadmap": roadmap,
-    }
+#     return {
+#         "match_score": match_score,
+#         "cosine_similarity": round(similarity * 100, 1),
+#         "skill_match_percentage": round(skill_match_ratio * 100, 1),
+#         "total_job_skills": len(job_skill_set),
+#         "matching_skills_count": len(resume_skill_set.intersection(job_skill_set)) if job_skill_set else 0,
+#         "missing_skills_count": len(job_skill_set - resume_skill_set) if job_skill_set else 0,
+#         "strengths": strengths,
+#         "weaknesses": weaknesses,
+#         "recommendations": recommendations[:15],  # Limit to top 15
+#         "ats_score": ats_score,
+#         "training_roadmap": roadmap,
+#     }
 
 
 def compute_ats_score(resume_data: dict, job_text: str) -> dict:
