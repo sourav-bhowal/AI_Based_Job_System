@@ -4,6 +4,9 @@ import os
 # Database path
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "database", "scam_detector.db")
 
+# Ensure the database directory exists (important for container deployments like Render)
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
 
 def get_db():
     """Get database connection with row factory."""
