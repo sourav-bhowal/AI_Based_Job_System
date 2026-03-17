@@ -12,6 +12,8 @@ Full-featured backend with:
 - JWT authentication
 """
 
+import os
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -45,6 +47,8 @@ from report_generator import generate_scan_report, generate_resume_match_report
 from ai_text_detector_bert import detect_ai_text
 # from ai_text_detector import detect_ai_text
 
+ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+
 # ========== App Setup ==========
 app = FastAPI(
     title="AI Job Analysis and Detection System",
@@ -55,7 +59,7 @@ app = FastAPI(
 # CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[ORIGIN],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["Content-Type", "Authorization"],
