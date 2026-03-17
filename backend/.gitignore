@@ -2,6 +2,7 @@
 /.vscode
 /data
 /database
+/reports
 ai_detector_bert
 .env
 /__pycache__
