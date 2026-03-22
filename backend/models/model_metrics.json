@@ -19,7 +19,7 @@
       ],
       "training_samples": 14304,
       "test_samples": 3576,
-      "trained_at": "2026-03-14T03:45:08.676059"
+      "trained_at": "2026-03-18T00:25:17.547415"
     },
     {
       "model_name": "Random Forest",
@@ -39,7 +39,7 @@
       ],
       "training_samples": 14304,
       "test_samples": 3576,
-      "trained_at": "2026-03-14T03:45:11.395846"
+      "trained_at": "2026-03-18T00:25:20.117709"
     },
     {
       "model_name": "SVM (Linear)",
@@ -59,7 +59,7 @@
       ],
       "training_samples": 14304,
       "test_samples": 3576,
-      "trained_at": "2026-03-14T03:45:11.594959"
+      "trained_at": "2026-03-18T00:25:20.303179"
     },
     {
       "model_name": "Naive Bayes",
@@ -79,7 +79,7 @@
       ],
       "training_samples": 14304,
       "test_samples": 3576,
-      "trained_at": "2026-03-14T03:45:11.621921"
+      "trained_at": "2026-03-18T00:25:20.328177"
     },
     {
       "model_name": "Gradient Boosting",
@@ -99,10 +99,10 @@
       ],
       "training_samples": 14304,
       "test_samples": 3576,
-      "trained_at": "2026-03-14T03:46:10.718641"
+      "trained_at": "2026-03-18T00:26:18.412854"
     }
   ],
   "vectorizer_features": 5000,
   "dataset_size": 17880,
-  "trained_at": "2026-03-14T03:46:10.796664"
+  "trained_at": "2026-03-18T00:26:18.498472"
 }

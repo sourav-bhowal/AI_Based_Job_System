@@ -880,7 +880,7 @@ Get scam report distribution by category.
 
 ### `POST /api/reports/generate-scan-pdf`
 
-Generate a downloadable PDF report for a job URL scan.
+Generate a scan PDF report for a job URL and upload it to S3.
 
 **Headers:** `Authorization: Bearer <token>` _(optional)_
 
@@ -894,7 +894,17 @@ Generate a downloadable PDF report for a job URL scan.
 
 **Success Response `200`:**
 
-Returns a **PDF file** (`application/pdf`) as a file download with filename `scan_report.pdf`.
+Returns a JSON payload containing a short‑lived pre‑signed S3 URL:
+
+```json
+{
+  "download_url": "https://s3.amazonaws.com/your-bucket/scan-reports/2026/03/18/scan_report_20260318_101500.pdf?...",
+  "s3_url": "s3://your-bucket/scan-reports/2026/03/18/scan_report_20260318_101500.pdf"
+}
+```
+
+> [!NOTE]
+> Report generation **requires** a valid S3 configuration (either `AWS_S3_REPORTS_BUCKET` or `AWS_S3_BUCKET_NAME`, optional `AWS_S3_REPORTS_PREFIX`, optional `AWS_S3_ENDPOINT`). If upload or configuration fails, the endpoint returns `500` and no URL is returned.
 
 **Error Responses:**
 
@@ -907,7 +917,7 @@ Returns a **PDF file** (`application/pdf`) as a file download with filename `sca
 
 ### `POST /api/reports/generate-match-pdf`
 
-Generate a downloadable PDF report for resume-job match analysis.
+Generate a resume-job match PDF report and upload it to S3.
 
 **Headers:** `Authorization: Bearer <token>` _(required)_
 
@@ -923,7 +933,17 @@ Generate a downloadable PDF report for resume-job match analysis.
 
 **Success Response `200`:**
 
-Returns a **PDF file** (`application/pdf`) as a file download with filename `match_report.pdf`.
+Returns a JSON payload with a pre‑signed S3 URL:
+
+```json
+{
+  "download_url": "https://s3.amazonaws.com/your-bucket/match-reports/2026/03/18/match_report_20260318_101500.pdf?...",
+  "s3_url": "s3://your-bucket/match-reports/2026/03/18/match_report_20260318_101500.pdf"
+}
+```
+
+> [!NOTE]
+> Like scan reports, match reports are only stored in S3. If S3 upload or configuration fails, the endpoint responds with `500` and no URL is returned.
 
 **Error Responses:**
 

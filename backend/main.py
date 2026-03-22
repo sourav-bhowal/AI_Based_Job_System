@@ -19,7 +19,6 @@ load_dotenv()
 
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import json
@@ -43,7 +42,7 @@ from analytics import (
     get_overview_stats, get_scan_trends, get_top_reported_companies,
     get_model_comparison, get_recent_scans, get_report_categories
 )
-from report_generator import generate_scan_report, generate_resume_match_report
+from report_generator import generate_scan_report, generate_resume_match_report, _get_s3_client
 from ai_text_detector_bert import detect_ai_text
 # from ai_text_detector import detect_ai_text
 
@@ -476,7 +475,7 @@ def api_report_categories():
 
 @app.post("/api/reports/generate-scan-pdf", tags=["PDF Reports"])
 def api_generate_scan_pdf(req: JobRequest, user=Depends(get_optional_user)):
-    """Generate a PDF report for a job scan."""
+    """Generate a PDF report for a job scan, upload it to S3, and return a pre-signed download URL."""
     # Scan the job
     job = scrape_job(req.url)
     score = compute_risk(job["description"], job["salary"], job["email"])
@@ -493,13 +492,23 @@ def api_generate_scan_pdf(req: JobRequest, user=Depends(get_optional_user)):
         "domain_score": 0,
     }
 
-    filepath = generate_scan_report(scan_data, explanation, salary_analysis)
-    return FileResponse(filepath, media_type="application/pdf", filename="scan_report.pdf")
+    s3_url, s3_key = generate_scan_report(scan_data, explanation, salary_analysis)
+
+    # Return a short-lived pre-signed URL for direct S3 download
+    s3 = _get_s3_client()
+    bucket = os.getenv("AWS_S3_REPORTS_BUCKET") or os.getenv("AWS_S3_BUCKET_NAME")
+    presigned_url = s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": bucket, "Key": s3_key},
+        ExpiresIn=600,  # 10 minutes
+    )
+
+    return {"download_url": presigned_url, "s3_url": s3_url}
 
 
 @app.post("/api/reports/generate-match-pdf", tags=["PDF Reports"])
 def api_generate_match_pdf(req: MatchJobRequest, user=Depends(get_current_user)):
-    """Generate a PDF report for resume-job match."""
+    """Generate a PDF report for resume-job match, upload it to S3, and return a pre-signed download URL."""
     # Get resume
     conn = get_db()
     resume_row = conn.execute(
@@ -530,8 +539,17 @@ def api_generate_match_pdf(req: MatchJobRequest, user=Depends(get_current_user))
         raise HTTPException(400, "Provide either job_url or job_text")
 
     match_result = compute_match_score(resume_data, job_text)
-    filepath = generate_resume_match_report(resume_data, match_result, req.job_url)
-    return FileResponse(filepath, media_type="application/pdf", filename="match_report.pdf")
+    s3_url, s3_key = generate_resume_match_report(resume_data, match_result, req.job_url)
+
+    s3 = _get_s3_client()
+    bucket = os.getenv("AWS_S3_REPORTS_BUCKET") or os.getenv("AWS_S3_BUCKET_NAME")
+    presigned_url = s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": bucket, "Key": s3_key},
+        ExpiresIn=600,  # 10 minutes
+    )
+
+    return {"download_url": presigned_url, "s3_url": s3_url}
 
 
 # ========== Health Check ==========

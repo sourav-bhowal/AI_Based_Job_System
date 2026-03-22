@@ -1,12 +1,77 @@
 from fpdf import FPDF
 from datetime import datetime
 import os
+import logging
+from typing import Tuple
+import boto3
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-REPORTS_DIR = os.path.join(SCRIPT_DIR, "reports")
+LOGGER = logging.getLogger(__name__)
 
-# Ensure reports directory exists
-os.makedirs(REPORTS_DIR, exist_ok=True)
+
+def _get_s3_client() -> boto3.client:
+    """
+    Construct an S3 client for report storage.
+
+    S3 integration is enabled and **required** when generating reports.
+    Region is controlled via AWS_REGION or AWS_DEFAULT_REGION as usual.
+    """
+    bucket = os.getenv("AWS_S3_REPORTS_BUCKET") or os.getenv("AWS_S3_BUCKET_NAME")
+    if not bucket:
+        raise RuntimeError(
+            "AWS_S3_REPORTS_BUCKET or AWS_S3_BUCKET_NAME is not set. Configure it to enable report generation."
+        )
+
+    try:
+        # Ensure we always use AWS Signature Version 4 (required by many S3-compatible providers)
+        s3_config = Config(signature_version="s3v4")
+
+        # Use custom endpoint if provided (e.g. Supabase S3-compatible storage)
+        endpoint_url = os.getenv("AWS_S3_ENDPOINT")
+        if endpoint_url:
+            return boto3.client("s3", endpoint_url=endpoint_url, config=s3_config)
+        # Fallback to default AWS endpoint / region resolution
+        return boto3.client("s3", config=s3_config)
+    except Exception as exc:  # pragma: no cover - very unlikely, defensive
+        LOGGER.error("Failed to create S3 client for report storage: %s", exc)
+        raise
+
+
+def _upload_report_bytes_to_s3(
+    data: bytes,
+    filename: str,
+    key_prefix: str = "reports",
+) -> Tuple[str, str]:
+    """
+    Upload a generated PDF report to S3.
+
+    Returns `(s3_url, key)` on success and raises on any failure.
+    """
+    bucket = os.getenv("AWS_S3_REPORTS_BUCKET") or os.getenv("AWS_S3_BUCKET_NAME")
+    if not bucket:
+        # Keep error message consistent with _get_s3_client
+        raise RuntimeError(
+            "AWS_S3_REPORTS_BUCKET or AWS_S3_BUCKET_NAME is not set. Configure it to enable report generation."
+        )
+
+    s3 = _get_s3_client()
+    timestamp = datetime.utcnow().strftime("%Y/%m/%d")
+
+    extra_prefix = os.getenv("AWS_S3_REPORTS_PREFIX", "").strip("/")
+    parts = [p for p in [key_prefix.strip("/"), timestamp, filename] if p]
+    key = "/".join(parts)
+    if extra_prefix:
+        key = f"{extra_prefix}/{key}"
+
+    try:
+        s3.put_object(Bucket=bucket, Key=key, Body=data, ContentType="application/pdf")
+        return f"s3://{bucket}/{key}", key
+    except (BotoCoreError, ClientError) as exc:
+        LOGGER.error(
+            "Failed to upload report to S3 (bucket=%s, key=%s): %s", bucket, key, exc
+        )
+        raise
 
 
 class ScamReportPDF(FPDF):
@@ -103,12 +168,16 @@ class ScamReportPDF(FPDF):
             self.multi_cell(0, 6, text, new_x="LMARGIN", new_y="NEXT")
 
 
-def generate_scan_report(scan_data: dict, explanation_data: dict = None, 
-                         salary_data: dict = None, company_data: dict = None) -> str:
+def generate_scan_report(
+    scan_data: dict,
+    explanation_data: dict = None,
+    salary_data: dict = None,
+    company_data: dict = None,
+) -> str:
     """
     Generate a comprehensive PDF report for a job scan analysis.
     
-    Returns the file path of the generated PDF.
+    Returns a tuple `(s3_url, s3_key)`.
     """
     pdf = ScamReportPDF()
     pdf.alias_nb_pages()
@@ -197,17 +266,36 @@ def generate_scan_report(scan_data: dict, explanation_data: dict = None,
         "The creators of this tool are not responsible for any decisions made based on this report."
     )
 
-    # Save PDF
+    # Render PDF to bytes in memory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"scan_report_{timestamp}.pdf"
-    filepath = os.path.join(REPORTS_DIR, filename)
-    pdf.output(filepath)
+    # FPDF may return either a str or a (byte)array depending on version
+    pdf_raw = pdf.output(dest="S")
+    pdf_bytes: bytes
+    if isinstance(pdf_raw, str):
+        pdf_bytes = pdf_raw.encode("latin-1")
+    else:
+        pdf_bytes = bytes(pdf_raw)
 
-    return filepath
+    # Upload to S3 (required; raises on failure)
+    s3_url, s3_key = _upload_report_bytes_to_s3(
+        pdf_bytes,
+        filename=filename,
+        key_prefix="scan-reports",
+    )
+
+    return s3_url, s3_key
 
 
-def generate_resume_match_report(resume_data: dict, match_data: dict, job_url: str = None) -> str:
-    """Generate a PDF report for resume-job matching analysis."""
+def generate_resume_match_report(
+    resume_data: dict,
+    match_data: dict,
+    job_url: str = None,
+) -> Tuple[str, str]:
+    """Generate a PDF report for resume-job matching analysis and upload to S3.
+
+    Returns a tuple `(s3_url, s3_key)`.
+    """
     pdf = ScamReportPDF()
     pdf.alias_nb_pages()
     pdf.add_page()
@@ -257,10 +345,21 @@ def generate_resume_match_report(resume_data: dict, match_data: dict, job_url: s
             pdf.set_font("Helvetica", "", 10)
             pdf.cell(0, 6, f"  {prefix} {tip['message']}", new_x="LMARGIN", new_y="NEXT")
 
-    # Save
+    # Render to bytes in memory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"match_report_{timestamp}.pdf"
-    filepath = os.path.join(REPORTS_DIR, filename)
-    pdf.output(filepath)
+    pdf_raw = pdf.output(dest="S")
+    pdf_bytes: bytes
+    if isinstance(pdf_raw, str):
+        pdf_bytes = pdf_raw.encode("latin-1")
+    else:
+        pdf_bytes = bytes(pdf_raw)
 
-    return filepath
+    # Upload to S3 (required; raises on failure)
+    s3_url, s3_key = _upload_report_bytes_to_s3(
+        pdf_bytes,
+        filename=filename,
+        key_prefix="match-reports",
+    )
+
+    return s3_url, s3_key

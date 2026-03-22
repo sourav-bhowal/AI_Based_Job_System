@@ -1,17 +1,24 @@
-import sqlite3
 import os
+import sqlitecloud
+from dotenv import load_dotenv
 
-# Database path
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "database", "scam_detector.db")
+load_dotenv()
 
-# Ensure the database directory exists (important for container deployments like Render)
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+SQLITE_CLOUD_URL = os.getenv("SQLITE_CLOUD_URL")
+
+if not SQLITE_CLOUD_URL:
+    raise RuntimeError("SQLITE_CLOUD_URL is not set. Add it to your .env file.")
+
+
+def _dict_row_factory(cursor, row):
+    """Return rows as dicts, mirroring sqlite3.Row key-access behaviour."""
+    return dict(zip([col[0] for col in cursor.description], row))
 
 
 def get_db():
-    """Get database connection with row factory."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    """Get a SQLite Cloud connection with dict row factory."""
+    conn = sqlitecloud.connect(SQLITE_CLOUD_URL)
+    conn.row_factory = _dict_row_factory
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 

@@ -1,5 +1,6 @@
 # --extra-index-url https://download.pytorch.org/whl/cu124
 
+sqlitecloud
 fastapi
 uvicorn
 scikit-learn
@@ -23,3 +24,4 @@ torch
 transformers
 sentence-transformers
 accelerate>=1.1.0
+boto3
