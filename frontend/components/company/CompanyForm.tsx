@@ -12,6 +12,7 @@ export default function CompanyForm() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CompanyCheckResult | null>(null);
+  const [searchedValues, setSearchedValues] = useState<{ name: string; domain?: string } | null>(null);
 
   async function clientAction(formData: FormData) {
     setError(null);
@@ -23,6 +24,10 @@ export default function CompanyForm() {
         
       if (actionRes.success) {
         setResult(actionRes.data);
+        setSearchedValues({
+          name: formData.get("company_name") as string,
+          domain: (formData.get("domain") as string) || undefined
+        });
       } else {
         setError(actionRes.error);
       }
@@ -68,9 +73,27 @@ export default function CompanyForm() {
 
       {result && (
         <div className="mt-8 space-y-6 animate-fade-in-up">
-          <Card padding="lg">
-            <div className="flex items-center justify-between">
-              <div>
+          <Card padding="lg" className="relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: trustColor(result.trust_score) }} />
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pt-2">
+              
+              <div className="flex-1">
+                {searchedValues && (
+                  <div className="mb-4 bg-[var(--background)] border border-[var(--card-border)] rounded-xl p-4 inline-block shadow-sm pr-12">
+                     <p className="text-xs font-bold uppercase tracking-widest text-[var(--muted)] mb-1">Entity Scanned</p>
+                     <p className="text-xl text-[var(--foreground)] font-extrabold tracking-tight flex items-center gap-2">
+                       <Building className="h-5 w-5 text-[var(--accent)]" /> 
+                       {searchedValues.name}
+                     </p>
+                     {searchedValues.domain && (
+                       <p className="text-sm font-medium text-[var(--muted)] flex items-center gap-1.5 mt-1 border-t border-[var(--card-border)] pt-1 w-fit">
+                         <Globe className="h-3.5 w-3.5" /> 
+                         {searchedValues.domain}
+                       </p>
+                     )}
+                  </div>
+                )}
+              
                 <p className="text-sm font-bold uppercase tracking-wide text-[var(--muted)] mb-1">Assessed Trust Level</p>
                 <h2 className="text-2xl font-bold flex items-center gap-2">
                   {result.trust_level}
@@ -83,7 +106,7 @@ export default function CompanyForm() {
                   )}
                 </h2>
               </div>
-              <div className="flex h-20 w-20 items-center justify-center rounded-2xl border-4 shadow-sm" style={{ borderColor: trustColor(result.trust_score) }}>
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl border-4 shadow-sm shrink-0" style={{ borderColor: trustColor(result.trust_score) }}>
                 <span className="text-3xl font-extrabold tracking-tighter" style={{ color: trustColor(result.trust_score) }}>{result.trust_score}</span>
               </div>
             </div>
