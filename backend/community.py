@@ -43,8 +43,8 @@ def get_reports(page: int = 1, per_page: int = 20, category: str = None) -> dict
         params.append(category)
 
     # Total count
-    count_query = f"SELECT COUNT(*) FROM ({query})"
-    total = conn.execute(count_query, params).fetchone()[0]
+    count_query = f"SELECT COUNT(*) AS cnt FROM ({query})"
+    total = list(conn.execute(count_query, params).fetchone().values())[0]
 
     query += " ORDER BY sr.created_at DESC LIMIT ? OFFSET ?"
     params.extend([per_page, offset])
@@ -112,10 +112,10 @@ def vote_report(report_id: int, user_id: int, vote_type: str) -> dict:
 
 def _update_blacklist(conn, company_name: str):
     """Auto-update company blacklist based on report count."""
-    report_count = conn.execute(
-        "SELECT COUNT(*) FROM scam_reports WHERE LOWER(company_name) = ?",
+    report_count = list(conn.execute(
+        "SELECT COUNT(*) AS cnt FROM scam_reports WHERE LOWER(company_name) = ?",
         (company_name.lower(),)
-    ).fetchone()[0]
+    ).fetchone().values())[0]
 
     if report_count >= 3:  # Auto-blacklist after 3 reports
         existing = conn.execute(

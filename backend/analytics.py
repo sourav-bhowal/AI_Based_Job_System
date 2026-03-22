@@ -12,25 +12,25 @@ def get_overview_stats() -> dict:
     """Get overall platform statistics."""
     conn = get_db()
 
-    total_users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    total_scans = conn.execute("SELECT COUNT(*) FROM scan_history").fetchone()[0]
-    total_reports = conn.execute("SELECT COUNT(*) FROM scam_reports").fetchone()[0]
-    total_resumes = conn.execute("SELECT COUNT(*) FROM resumes").fetchone()[0]
-    blacklisted = conn.execute("SELECT COUNT(*) FROM company_blacklist").fetchone()[0]
+    total_users = list(conn.execute("SELECT COUNT(*) AS cnt FROM users").fetchone().values())[0]
+    total_scans = list(conn.execute("SELECT COUNT(*) AS cnt FROM scan_history").fetchone().values())[0]
+    total_reports = list(conn.execute("SELECT COUNT(*) AS cnt FROM scam_reports").fetchone().values())[0]
+    total_resumes = list(conn.execute("SELECT COUNT(*) AS cnt FROM resumes").fetchone().values())[0]
+    blacklisted = list(conn.execute("SELECT COUNT(*) AS cnt FROM company_blacklist").fetchone().values())[0]
 
     # Average risk score
-    avg_risk = conn.execute("SELECT AVG(risk_score) FROM scan_history").fetchone()[0]
+    avg_risk = list(conn.execute("SELECT AVG(risk_score) AS avg_val FROM scan_history").fetchone().values())[0]
 
     # Scans today
     today = datetime.now().strftime("%Y-%m-%d")
-    scans_today = conn.execute(
-        "SELECT COUNT(*) FROM scan_history WHERE DATE(scanned_at) = ?", (today,)
-    ).fetchone()[0]
+    scans_today = list(conn.execute(
+        "SELECT COUNT(*) AS cnt FROM scan_history WHERE DATE(scanned_at) = ?", (today,)
+    ).fetchone().values())[0]
 
     # Risk distribution
-    high_risk = conn.execute("SELECT COUNT(*) FROM scan_history WHERE risk_level = 'High Risk'").fetchone()[0]
-    medium_risk = conn.execute("SELECT COUNT(*) FROM scan_history WHERE risk_level = 'Medium Risk'").fetchone()[0]
-    safe = conn.execute("SELECT COUNT(*) FROM scan_history WHERE risk_level = 'Safe'").fetchone()[0]
+    high_risk = list(conn.execute("SELECT COUNT(*) AS cnt FROM scan_history WHERE risk_level = 'High Risk'").fetchone().values())[0]
+    medium_risk = list(conn.execute("SELECT COUNT(*) AS cnt FROM scan_history WHERE risk_level = 'Medium Risk'").fetchone().values())[0]
+    safe = list(conn.execute("SELECT COUNT(*) AS cnt FROM scan_history WHERE risk_level = 'Safe'").fetchone().values())[0]
 
     conn.close()
 

@@ -4,6 +4,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 import socket
 import ssl
+from database import get_db
 
 
 # ---------------------------
@@ -199,6 +200,83 @@ def score_domain(info: dict) -> dict:
 
 
 # ---------------------------
+# COMMUNITY DATA LOOKUP
+# ---------------------------
+def get_community_reports(company_name: str) -> dict:
+    """Fetch community scam report count and details for a company."""
+    conn = get_db()
+    count_row = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM scam_reports WHERE LOWER(company_name) = ?",
+        (company_name.lower(),)
+    ).fetchone()
+    report_count = list(count_row.values())[0] if count_row else 0
+
+    # Get recent reports (up to 5) for context
+    recent = conn.execute(
+        """SELECT category, description, upvotes, downvotes, created_at 
+           FROM scam_reports WHERE LOWER(company_name) = ?
+           ORDER BY created_at DESC LIMIT 5""",
+        (company_name.lower(),)
+    ).fetchall()
+    conn.close()
+
+    return {
+        "report_count": report_count,
+        "recent_reports": [dict(r) for r in recent],
+    }
+
+
+def check_company_blacklist(company_name: str) -> dict | None:
+    """Check if a company is on the blacklist."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM company_blacklist WHERE LOWER(company_name) = ?",
+        (company_name.lower(),)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def compute_community_score(company_name: str) -> dict:
+    """Compute a community trust score based on reports and blacklist status."""
+    reports = get_community_reports(company_name)
+    blacklist_entry = check_company_blacklist(company_name)
+
+    score = 70  # neutral starting point
+    confidence = 0.5
+    reasons = []
+
+    report_count = reports["report_count"]
+
+    if report_count == 0:
+        score = 70
+        reasons.append("No community reports")
+        confidence = 0.4
+    elif report_count < 3:
+        score = 50
+        reasons.append(f"{report_count} community report(s)")
+        confidence = 0.7
+    else:
+        score = max(10, 50 - (report_count * 8))
+        reasons.append(f"{report_count} community reports")
+        confidence = 0.9
+
+    if blacklist_entry:
+        score = min(score, int(blacklist_entry.get("trust_score", 20)))
+        reasons.append("Company is blacklisted")
+        confidence = 1.0
+
+    return {
+        "score": max(0, min(score, 100)),
+        "confidence": confidence,
+        "reasons": reasons,
+        "report_count": report_count,
+        "is_blacklisted": blacklist_entry is not None,
+        "blacklist_entry": blacklist_entry,
+    }
+
+
+# ---------------------------
 # FINAL TRUST SCORE
 # ---------------------------
 def compute_company_trust_score(company_name: str, domain: str = None, email: str = None) -> dict:
@@ -215,11 +293,15 @@ def compute_company_trust_score(company_name: str, domain: str = None, email: st
     # --- NAME ---
     name_result = analyze_company_name(company_name)
 
+    # --- COMMUNITY ---
+    community_result = compute_community_score(company_name)
+
     # --- WEIGHTING (reliability-based) ---
     components = [
         ("domain", domain_result),
         ("email", email_result),
         ("name", name_result),
+        ("community", community_result),
     ]
 
     total_weight = 0
@@ -251,5 +333,11 @@ def compute_company_trust_score(company_name: str, domain: str = None, email: st
             "domain": domain_result,
             "email": email_result,
             "name": name_result,
-        }
-    }
+            "community": community_result,
+        },
+        "community_data": {
+            "report_count": community_result["report_count"],
+            "is_blacklisted": community_result["is_blacklisted"],
+            "blacklist_entry": community_result["blacklist_entry"],
+        },
+    }
