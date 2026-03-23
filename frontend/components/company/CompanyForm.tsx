@@ -73,6 +73,16 @@ export default function CompanyForm() {
 
       {result && (
         <div className="mt-8 space-y-6 animate-fade-in-up">
+          {result.community_data?.is_blacklisted && (
+            <div className="rounded-xl bg-[var(--danger)]/10 border border-[var(--danger)]/20 p-5 flex flex-col sm:flex-row items-center gap-4 text-[var(--danger)] shadow-sm">
+              <AlertTriangle className="h-10 w-10 shrink-0" />
+              <div>
+                <h3 className="font-bold text-lg">CRITICAL WARNING: COMPANY BLACKLISTED</h3>
+                <p className="text-sm opacity-90 font-medium">This company has been reported {result.community_data.report_count} times by the community and is flagged as a high-risk scam.</p>
+              </div>
+            </div>
+          )}
+
           <Card padding="lg" className="relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: trustColor(result.trust_score) }} />
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pt-2">
@@ -141,7 +151,8 @@ export default function CompanyForm() {
                 {[
                   ...(result.details.domain?.reasons || []).map(msg => ({ msg, source: "Domain" })),
                   ...(result.details.email?.reason ? [{ msg: result.details.email.reason, source: "Email" }] : []),
-                  ...(result.details.name?.signals || []).map(msg => ({ msg, source: "Name" }))
+                  ...(result.details.name?.signals || []).map(msg => ({ msg, source: "Name" })),
+                  ...(result.details.community?.reasons || []).map(msg => ({ msg, source: "Community" }))
                 ].map((item, i) => (
                   <li key={i} className="text-sm font-medium flex items-start gap-2 p-3 rounded-lg border border-[var(--card-border)] bg-[var(--background)] text-[var(--foreground)]">
                     <span className="mt-0.5 text-[var(--accent)]">●</span> 

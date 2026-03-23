@@ -208,8 +208,8 @@ export async function getBlacklistSSR(): Promise<{
 
 // ========== PDF Reports ==========
 
-export async function generateScanPdfSSR(url: string): Promise<Blob> {
-  return serverFetch<Blob>("/api/reports/generate-scan-pdf", {
+export async function generateScanPdfSSR(url: string): Promise<{ download_url: string, s3_url: string }> {
+  return serverFetch<{ download_url: string, s3_url: string }>("/api/reports/generate-scan-pdf", {
     method: "POST",
     body: JSON.stringify({ url }),
   });
@@ -219,8 +219,8 @@ export async function generateMatchPdfSSR(
   resume_id: number,
   job_url?: string,
   job_text?: string
-): Promise<Blob> {
-  return serverFetch<Blob>("/api/reports/generate-match-pdf", {
+): Promise<{ download_url: string, s3_url: string }> {
+  return serverFetch<{ download_url: string, s3_url: string }>("/api/reports/generate-match-pdf", {
     method: "POST",
     body: JSON.stringify({ resume_id, job_url, job_text }),
   });

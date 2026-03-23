@@ -44,10 +44,8 @@ export async function scanTextAction(
 
 export async function downloadScanPdfAction(url: string) {
   try {
-    const blob = await generateScanPdfSSR(url);
-    const arrayBuffer = await blob.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString('base64');
-    return { success: true, pdfBase64: base64 };
+    const data = await generateScanPdfSSR(url);
+    return { success: true, downloadUrl: data.download_url };
   } catch (error: any) {
     return { success: false, error: error.message || "Failed to generate PDF" };
   }

@@ -258,6 +258,16 @@ export interface CompanyCheckResult {
       confidence: number;
       signals: string[];
     };
+    community?: {
+      score: number;
+      confidence: number;
+      reasons: string[];
+    };
+  };
+  community_data?: {
+    report_count: number;
+    is_blacklisted: boolean;
+    blacklist_entry: any | null;
   };
 }
 
