@@ -142,6 +142,7 @@ export interface ResumeUploadResult {
   education: string[];
   experience_years: number;
   contact: {
+    name?: string;
     email?: string;
     phone?: string;
     linkedin?: string;
