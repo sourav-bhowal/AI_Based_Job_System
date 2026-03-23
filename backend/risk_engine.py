@@ -33,12 +33,20 @@ def salary_anomaly(salary):
     if min_sal is None:
         return 0.3
     
+    # Detect currency and normalize to USD-equivalent for threshold checks
+    salary_str = str(salary).lower()
+    is_inr = any(marker in salary_str for marker in ["₹", "rs", "inr", "lpa", "lakh"])
+    
+    # Convert INR to approximate USD for consistent thresholds (1 USD ≈ 83 INR)
+    norm_min = min_sal / 83.0 if is_inr else min_sal
+    norm_max = max_sal / 83.0 if is_inr else max_sal
+    
     # Very high salary ranges are suspicious (e.g., "Earn $5000/week")
-    if max_sal and max_sal > 150000:
+    if norm_max and norm_max > 150000:
         return 0.7
     
     # Extremely wide salary ranges are suspicious
-    if min_sal and max_sal and (max_sal - min_sal) > 80000:
+    if norm_min and norm_max and (norm_max - norm_min) > 80000:
         return 0.5
     
     # Normal salary range

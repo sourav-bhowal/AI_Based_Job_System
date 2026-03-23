@@ -79,17 +79,19 @@ def train_all_models():
     X_train_vec = vectorizer.fit_transform(X_train)
     X_test_vec = vectorizer.transform(X_test)
 
-    # Define models
+    # Define models — class_weight="balanced" handles the 95:5 scam imbalance
+    # CalibratedClassifierCV wraps LinearSVC to give proper predict_proba() support
+    from sklearn.calibration import CalibratedClassifierCV
     models = {
-        "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
-        "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1),
-        "SVM (Linear)": LinearSVC(max_iter=2000, random_state=42),
+        "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42, class_weight="balanced"),
+        "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1, class_weight="balanced"),
+        "SVM (Linear)": CalibratedClassifierCV(LinearSVC(max_iter=2000, random_state=42, class_weight="balanced"), cv=3),
         "Naive Bayes": MultinomialNB(),
         "Gradient Boosting": GradientBoostingClassifier(n_estimators=100, random_state=42),
     }
 
     results = []
-    best_accuracy = 0
+    best_f1 = 0
     best_model_name = None
     best_model = None
 
@@ -132,15 +134,15 @@ def train_all_models():
         }
         results.append(model_result)
 
-        # Track best model
-        if acc > best_accuracy:
-            best_accuracy = acc
+        # Track best model by F1 score (not accuracy — accuracy is misleading on imbalanced data)
+        if f1 > best_f1:
+            best_f1 = f1
             best_model_name = name
             best_model = model
 
     # Save best model and vectorizer
     print(f"\n{'#' * 50}")
-    print(f"BEST MODEL: {best_model_name} ({best_accuracy * 100:.2f}% accuracy)")
+    print(f"BEST MODEL: {best_model_name} ({best_f1 * 100:.2f}% F1)")
     print(f"{'#' * 50}")
 
     model_path = os.path.join(SCRIPT_DIR, "models", "model.pkl")

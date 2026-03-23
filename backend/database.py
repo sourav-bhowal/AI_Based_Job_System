@@ -72,6 +72,7 @@ def init_db():
             skills TEXT,
             experience TEXT,
             education TEXT,
+            contact TEXT,
             uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
@@ -155,6 +156,13 @@ def init_db():
             trained_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # --- Migrations ---
+    # Add 'contact' column to resumes if it doesn't exist (safe to re-run)
+    try:
+        cursor.execute("ALTER TABLE resumes ADD COLUMN contact TEXT")
+    except Exception:
+        pass  # Column already exists
 
     conn.commit()
     conn.close()
