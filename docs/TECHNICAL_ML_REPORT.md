@@ -2,7 +2,7 @@
 
 ## Abstract
 
-This system implements a multi-layered fraud detection pipeline for job postings, combining supervised text classification, statistical stylometry, named entity recognition, regression-based salary anomaly detection, and ensemble heuristic scoring. The primary classifier achieves **98.55% accuracy** on a binary classification task (legitimate vs. fraudulent) using a Linear SVM trained on TF-IDF feature vectors extracted from 17,880 labeled job postings.
+This system implements a multi-layered fraud detection pipeline for job postings, combining supervised text classification, statistical stylometry, named entity recognition, regression-based salary anomaly detection, and ensemble heuristic scoring. The primary classifier achieves **82.20% F1-score** on a binary classification task (legitimate vs. fraudulent) using a Linear SVM wrapped in `CalibratedClassifierCV` with `class_weight="balanced"`, trained on TF-IDF feature vectors extracted from 17,880 labeled job postings.
 
 ---
 
@@ -21,21 +21,21 @@ The resulting sparse feature matrix has dimensionality **n_samples × 5,000**.
 
 ### 1.2 Model Selection — Comparative Evaluation
 
-Five classifiers were trained using an **80/20 stratified train-test split** (14,304 training samples, 3,576 test samples) to preserve class distribution (the dataset is highly imbalanced: ~95.2% legitimate, ~4.8% fraudulent):
+Five classifiers were trained using an **80/20 stratified train-test split** (14,304 training samples, 3,576 test samples) to preserve class distribution (the dataset is highly imbalanced: ~95.2% legitimate, ~4.8% fraudulent). Models that support it use `class_weight="balanced"` to counteract the imbalance. LinearSVC is wrapped in `CalibratedClassifierCV` for proper `predict_proba()` support:
 
 | Model                   | Accuracy   | Precision  | Recall     | F1-Score   | TP  | FP  | FN  | TN   |
 | ----------------------- | ---------- | ---------- | ---------- | ---------- | --- | --- | --- | ---- |
-| **SVM (Linear)** ★      | **98.55%** | **96.18%** | **72.83%** | **82.89%** | 126 | 5   | 47  | 3398 |
-| Random Forest           | 97.99%     | 100.0%     | 58.38%     | 73.72%     | 101 | 0   | 72  | 3403 |
+| **SVM (Linear)** ★      | **98.46%** | 93.38%     | **73.41%** | **82.20%** | 127 | 9   | 46  | 3394 |
+| Logistic Regression     | 96.98%     | 63.16%     | **90.17%** | 74.29%     | 156 | 91  | 17  | 3312 |
+| Random Forest           | 97.90%     | 99.0%      | 57.23%     | 72.53%     | 99  | 1   | 74  | 3402 |
 | Gradient Boosting       | 97.79%     | 91.96%     | 59.54%     | 72.28%     | 103 | 9   | 70  | 3394 |
-| Logistic Regression     | 97.40%     | 100.0%     | 46.24%     | 63.24%     | 80  | 0   | 93  | 3403 |
 | Multinomial Naive Bayes | 96.98%     | 88.24%     | 43.35%     | 58.14%     | 75  | 10  | 98  | 3393 |
 
-**Winner: Linear SVM** — selected by highest accuracy. Notably, SVM achieves the best F1-score (82.89%) and recall (72.83%), meaning it catches the most fraudulent postings while maintaining 96.18% precision. The linear kernel operates in the TF-IDF feature space without kernel trick transformation, making it computationally efficient for high-dimensional sparse text data.
+**Winner: Linear SVM** — selected by highest **F1-score** (not accuracy, which is misleading on imbalanced data). The SVM achieves the best balance of precision (93.38%) and recall (73.41%). Notably, Logistic Regression with `class_weight="balanced"` achieves the highest recall at 90.17%, making it the best choice if catching every scam is the top priority.
 
-### 1.3 Class Imbalance
+### 1.3 Class Imbalance Handling
 
-The dataset exhibits significant class imbalance (19.5:1 ratio). This explains why all models achieve >96% accuracy (majority class baseline is ~95.2%) but show lower recall on the minority class (scam). The SVM's superior recall (72.83% vs. 43-59% for others) makes it the optimal choice for this fraud detection use case where **false negatives are more costly than false positives**.
+The dataset exhibits significant class imbalance (19.5:1 ratio). All models that support it use `class_weight="balanced"`, which automatically upweights the minority class (scam) during training. This dramatically improved recall — Logistic Regression's recall jumped from 46.24% (without balancing) to 90.17% (with balancing). The SVM's recall improved slightly from 72.83% to 73.41%, as it was already more robust to imbalance. Best model selection uses F1-score rather than accuracy, since accuracy is dominated by the majority class (∼95.2% baseline).
 
 ---
 
@@ -46,6 +46,8 @@ Post-hoc interpretability is achieved through **linear model coefficient analysi
 ```
 contribution_i = coefficient_i × tfidf_value_i
 ```
+
+When the saved model is a `CalibratedClassifierCV` wrapper (as with the current SVM), the explainer automatically unwraps it to access the inner estimator's `coef_` vector via `model.calibrated_classifiers_[0].estimator.coef_`.
 
 Features are ranked by absolute contribution magnitude and partitioned into positive contributors (scam indicators) and negative contributors (legitimacy indicators). The top-k features in each direction are surfaced to the user, providing token-level explainability.
 
@@ -174,4 +176,4 @@ This multi-signal ensemble reduces variance and provides robustness against adve
 
 ---
 
-_Dataset: 17,880 labeled job postings | 5 classifiers | 98.55% accuracy | Linear SVM selected | TF-IDF (5K features, bigrams)_
+_Dataset: 17,880 labeled job postings | 5 classifiers | class_weight="balanced" | 82.20% F1 | Linear SVM + CalibratedClassifierCV selected | TF-IDF (5K features, bigrams)_
