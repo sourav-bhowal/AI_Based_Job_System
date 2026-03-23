@@ -238,20 +238,26 @@ export interface CompanyDetail {
 }
 
 export interface CompanyCheckResult {
-  company_name: string;
+  company: string;
   trust_score: number;
   trust_level: string;
-  breakdown: Record<string, number>;
-  confidence?: "high" | "medium" | "low";
-  confidence_score?: number;
-  signal_reliability?: Record<string, number>;
-  effective_weights?: Record<string, number>;
-  details: CompanyDetail[];
-  community_data: {
-    total_reports: number;
-    total_upvotes: number;
-    is_blacklisted: boolean;
-    blacklist_trust_score: number | null;
+  confidence: number;
+  details: {
+    domain: {
+      score: number;
+      confidence: number;
+      reasons: string[];
+    };
+    email: {
+      score: number;
+      confidence: number;
+      reason: string;
+    };
+    name: {
+      score: number;
+      confidence: number;
+      signals: string[];
+    };
   };
 }
 
