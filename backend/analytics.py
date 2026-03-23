@@ -21,10 +21,9 @@ def get_overview_stats() -> dict:
     # Average risk score
     avg_risk = list(conn.execute("SELECT AVG(risk_score) AS avg_val FROM scan_history").fetchone().values())[0]
 
-    # Scans today
-    today = datetime.now().strftime("%Y-%m-%d")
+    # Scans today (use SQLite's DATE('now') to stay in UTC, matching CURRENT_TIMESTAMP)
     scans_today = list(conn.execute(
-        "SELECT COUNT(*) AS cnt FROM scan_history WHERE DATE(scanned_at) = ?", (today,)
+        "SELECT COUNT(*) AS cnt FROM scan_history WHERE DATE(scanned_at) = DATE('now')"
     ).fetchone().values())[0]
 
     # Risk distribution
