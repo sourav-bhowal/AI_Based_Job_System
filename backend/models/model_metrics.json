@@ -3,63 +3,63 @@
   "models": [
     {
       "model_name": "Logistic Regression",
-      "accuracy": 97.4,
-      "precision": 100.0,
-      "recall": 46.24,
-      "f1_score": 63.24,
+      "accuracy": 96.98,
+      "precision": 63.16,
+      "recall": 90.17,
+      "f1_score": 74.29,
       "confusion_matrix": [
         [
-          3403,
-          0
+          3312,
+          91
         ],
         [
-          93,
-          80
+          17,
+          156
         ]
       ],
       "training_samples": 14304,
       "test_samples": 3576,
-      "trained_at": "2026-03-18T00:25:17.547415"
+      "trained_at": "2026-03-23T22:15:34.453783"
     },
     {
       "model_name": "Random Forest",
-      "accuracy": 97.99,
-      "precision": 100.0,
-      "recall": 58.38,
-      "f1_score": 73.72,
+      "accuracy": 97.9,
+      "precision": 99.0,
+      "recall": 57.23,
+      "f1_score": 72.53,
       "confusion_matrix": [
         [
-          3403,
-          0
+          3402,
+          1
         ],
         [
-          72,
-          101
+          74,
+          99
         ]
       ],
       "training_samples": 14304,
       "test_samples": 3576,
-      "trained_at": "2026-03-18T00:25:20.117709"
+      "trained_at": "2026-03-23T22:15:35.508371"
     },
     {
       "model_name": "SVM (Linear)",
-      "accuracy": 98.55,
-      "precision": 96.18,
-      "recall": 72.83,
-      "f1_score": 82.89,
+      "accuracy": 98.46,
+      "precision": 93.38,
+      "recall": 73.41,
+      "f1_score": 82.2,
       "confusion_matrix": [
         [
-          3398,
-          5
+          3394,
+          9
         ],
         [
-          47,
-          126
+          46,
+          127
         ]
       ],
       "training_samples": 14304,
       "test_samples": 3576,
-      "trained_at": "2026-03-18T00:25:20.303179"
+      "trained_at": "2026-03-23T22:15:36.108581"
     },
     {
       "model_name": "Naive Bayes",
@@ -79,7 +79,7 @@
       ],
       "training_samples": 14304,
       "test_samples": 3576,
-      "trained_at": "2026-03-18T00:25:20.328177"
+      "trained_at": "2026-03-23T22:15:36.133915"
     },
     {
       "model_name": "Gradient Boosting",
@@ -99,10 +99,10 @@
       ],
       "training_samples": 14304,
       "test_samples": 3576,
-      "trained_at": "2026-03-18T00:26:18.412854"
+      "trained_at": "2026-03-23T22:16:35.027384"
     }
   ],
   "vectorizer_features": 5000,
   "dataset_size": 17880,
-  "trained_at": "2026-03-18T00:26:18.498472"
+  "trained_at": "2026-03-23T22:16:35.113074"
 }

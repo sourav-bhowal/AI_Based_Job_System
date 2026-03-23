@@ -227,13 +227,14 @@ Stores uploaded resume files (parsed text, not raw files).
 | `id`             | INTEGER   | PRIMARY KEY, AUTOINCREMENT | Resume record ID                                                  |
 | `user_id`        | INTEGER   | FK → `users(id)`, NOT NULL | Owner of the resume                                               |
 | `filename`       | TEXT      | NOT NULL                   | Original uploaded filename                                        |
-| `extracted_text` | TEXT      | —                          | Plain text extracted from PDF/DOCX/TXT (first 5000 chars)         |
+| `extracted_text` | TEXT      | —                          | Plain text extracted from PDF/DOCX/TXT (first 10,000 chars)       |
 | `skills`         | TEXT      | —                          | JSON string of categorized skills `{"category": ["skill1", ...]}` |
 | `experience`     | TEXT      | —                          | Years of experience as string                                     |
 | `education`      | TEXT      | —                          | JSON array of education qualifications                            |
+| `contact`        | TEXT      | —                          | JSON object with email, phone, linkedin, github                   |
 | `uploaded_at`    | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP  | Upload timestamp                                                  |
 
-**Important:** Raw binary files are **not stored** in the database. Only extracted text and parsed metadata are saved. Skills are stored as a JSON-serialized dictionary keyed by category.
+**Important:** Raw binary files are **not stored** in the database. Only extracted text and parsed metadata are saved. Skills are stored as a JSON-serialized dictionary keyed by category. Contact info is stored as a JSON object and used by ATS scoring during resume-job matching.
 
 ---
 
@@ -402,9 +403,10 @@ User submits URL
 
 3. **Risk Score Computation** (`risk_engine.py → compute_risk(description, salary, email)`):
    - **NLP score** (50% weight): `predict_scam(description)` → [0-1]
-   - **Salary score** (30% weight): Heuristic checks:
+   - **Salary score** (30% weight): Currency-aware heuristic checks:
      - No salary → 0.3 (slightly suspicious)
-     - Max > $150,000 → 0.7
+     - Detects ₹/Rs/INR and normalizes to USD-equivalent (÷83) for consistent thresholds
+     - Max > $150,000 (or ₹equivalent) → 0.7
      - Range > $80,000 width → 0.5
      - Normal → 0.1
    - **Domain score** (20% weight): WHOIS lookup on email domain:
@@ -473,14 +475,15 @@ fake_job_postings.csv
        │
        ▼
 ┌─────────────────────────────────────┐
-│ Train 5 Models:                     │
+│ Train 5 Models (class_weight=       │
+│ "balanced" for imbalanced data):    │
 │                                     │
-│ 1. Logistic Regression (max_iter=   │
-│    1000)                            │
-│ 2. Random Forest (100 estimators)   │
-│ 3. Linear SVM (max_iter=2000)       │
+│ 1. Logistic Regression (balanced)   │
+│ 2. Random Forest (balanced)         │
+│ 3. Linear SVM + CalibratedCV        │
+│    (balanced, with predict_proba)   │
 │ 4. Multinomial Naive Bayes          │
-│ 5. Gradient Boosting (100 est.)     │
+│ 5. Gradient Boosting                │
 │                                     │
 │ Metrics per model:                  │
 │ - Accuracy, Precision, Recall, F1   │
@@ -490,7 +493,7 @@ fake_job_postings.csv
        │
        ▼
 ┌─────────────────────────────────────┐
-│ Select Best Model (by accuracy)     │
+│ Select Best Model (by F1 score)     │
 │                                     │
 │ Save to:                            │
 │ - model.pkl         (best model)    │
@@ -501,22 +504,22 @@ fake_job_postings.csv
 └─────────────────────────────────────┘
 ```
 
-**Training dataset:** `datasets/fake_job_postings.csv` — ~17,880 records with binary label `fraudulent` (0 = legitimate, 1 = scam). Column `text` is created by concatenating 13 text fields.
+**Training dataset:** `datasets/fake_job_postings.csv` — ~17,880 records with binary label `fraudulent` (0 = legitimate, 1 = scam). Column `text` is created by concatenating 13 text fields. Dataset is heavily imbalanced (~95.2% legitimate, ~4.8% fraudulent), so `class_weight="balanced"` is applied to handle this.
 
 **Serialized artifacts (saved to `models/`):**
 
-- `model.pkl` (~40 KB) — best performing model (currently **SVM Linear** at **98.55% accuracy**)
+- `model.pkl` — best performing model by F1 score (currently **SVM Linear** wrapped in `CalibratedClassifierCV` at **82.20% F1**)
 - `vectorizer.pkl` (~197 KB) — fitted TF-IDF vectorizer with 5000-feature vocabulary
 - `all_models.pkl` (~5.7 MB) — all 5 trained classifiers for comparison
 
-**Latest model comparison results:**
+**Latest model comparison results (with `class_weight="balanced"`):**
 
 | Model               | Accuracy | Precision | Recall | F1 Score |
 | -------------------- | -------- | --------- | ------ | -------- |
-| **SVM (Linear)**     | **98.55%** | 96.18%  | 72.83% | 82.89%   |
-| Random Forest        | 97.99%   | 100.0%    | 58.38% | 73.72%   |
+| **SVM (Linear)** ★   | **98.46%** | 93.38%  | **73.41%** | **82.20%** |
+| Logistic Regression  | 96.98%   | 63.16%    | **90.17%** | 74.29%   |
+| Random Forest        | 97.90%   | 99.0%     | 57.23% | 72.53%   |
 | Gradient Boosting    | 97.79%   | 91.96%    | 59.54% | 72.28%   |
-| Logistic Regression  | 97.40%   | 100.0%    | 46.24% | 63.24%   |
 | Naive Bayes          | 96.98%   | 88.24%    | 43.35% | 58.14%   |
 
 ---

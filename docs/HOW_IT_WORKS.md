@@ -128,12 +128,13 @@ We train **5 different models** and pick the best one. Here's why each was inclu
 
 Because you don't know which works best until you try. By training all 5 and comparing metrics (accuracy, precision, recall, F1), we scientifically pick the best one. The winner is saved as `model.pkl`.
 
-**In our case, SVM (Linear) wins** with **98.55% accuracy** and the best F1-score (82.89%). Here's why:
+**In our case, SVM (Linear) wins** with the best **F1-score (82.20%)** and **73% recall on scams**. Here's why:
 
 1. Linear SVM is highly effective on high-dimensional sparse text data (TF-IDF vectors)
-2. It achieves the best recall (72.83%) — meaning it catches the most scams while keeping precision at 96.18%
-3. Like Logistic Regression, Linear SVM has a `coef_` vector, so we still get full **explainability** (we can show _which words_ caused the flag)
-4. The linear kernel makes it computationally efficient — no expensive kernel trick needed
+2. It achieves strong recall (73.41%) — meaning it catches most scams while keeping precision at 93.38%
+3. With `CalibratedClassifierCV` wrapping, it gains proper `predict_proba()` support for calibrated probability estimates
+4. Like Logistic Regression, Linear SVM has a `coef_` vector (accessible via the wrapped estimator), so we still get full **explainability** (we can show _which words_ caused the flag)
+5. All models use `class_weight="balanced"` to handle the 95:5 dataset imbalance — this dramatically improved Logistic Regression's recall from 46% → 90%
 
 ---
 
@@ -223,10 +224,12 @@ Step 3: Split into Training (80%) and Test (20%)
 Step 4: TF-IDF vectorize all text → 5000-dimension number vectors
         ▼
 Step 5: Train all 5 models on the training set
+         (with class_weight="balanced" for LR, RF, SVM to handle 95:5 imbalance)
         ▼
 Step 6: Test all 5 models on the test set → get accuracy/precision/recall/F1
         ▼
-Step 7: Pick the best model (highest accuracy)
+Step 7: Pick the best model (highest F1 score — not accuracy, because accuracy
+         is misleading on imbalanced data where 95% is the majority class)
         ▼
 Step 8: Save to model.pkl and vectorizer.pkl
 ```
@@ -283,7 +286,7 @@ This is the most important part for user trust.
 
 **Step 1: Feature Contributions**
 
-Remember that TF-IDF converts text into 5000 numbers? And linear models (like our SVM or Logistic Regression) have 5000 corresponding "weights" (coefficients)?
+Remember that TF-IDF converts text into 5000 numbers? And linear models (like our SVM or Logistic Regression) have 5000 corresponding "weights" (coefficients)? Our trained model is an SVM wrapped in `CalibratedClassifierCV` — the explainer automatically unwraps this to access the inner SVM's `coef_` vector.
 
 ```
 For each word in the job posting:
@@ -316,7 +319,7 @@ On top of the ML explanation, we also scan for **known scam patterns** using reg
 | **No Experience Needed** | "no experience required, work from home" | 🟠 High     |
 | **WhatsApp Only**        | "contact us on WhatsApp"                 | 🟠 High     |
 | **Urgency**              | "apply NOW, limited spots"               | 🟡 Medium   |
-| **Generic Email**        | "send CV to hr@gmail.com"                | 🟡 Medium   |
+| **Generic Email**        | "send CV to <hr@gmail.com>"              | 🟡 Medium   |
 | **Vague Description**    | "various tasks and activities"           | 🟢 Low      |
 
 ### Step 4: NER Entity Analysis

@@ -182,23 +182,58 @@ def extract_contact_info(text: str) -> dict:
     """Extract contact information from resume."""
     contact = {}
 
+    # Normalize text to fix common PDF extraction artifacts:
+    # - Collapse multiple whitespace/newlines into single spaces
+    # - Remove spaces around @ and . that PDF extractors often insert
+    normalized = re.sub(r'\s+', ' ', text)
+
+    # Build an email-friendly version: remove spaces around @ and dots
+    # e.g. "john @ gmail . com" -> "john@gmail.com"
+    email_text = re.sub(r'\s*@\s*', '@', normalized)
+    email_text = re.sub(r'\s*\.\s*', '.', email_text)
+
     # Email
-    email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
+    email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', email_text)
     if email_match:
         contact["email"] = email_match.group()
 
-    # Phone (Indian and international formats)
-    phone_match = re.search(r'(?:\+?\d{1,3}[-.\s]?)?\(?\d{3,5}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}', text)
+    # Phone: strip all whitespace from a copy so digits are contiguous,
+    # then match common phone formats (Indian & international)
+    phone_text = re.sub(r'[^\d+().\-]', ' ', normalized)  # keep digits and phone chars
+    phone_text = re.sub(r'\s+', ' ', phone_text).strip()
+
+    phone_match = re.search(
+        r'(?:\+?\d{1,3}[-.\s]?)?'   # optional country code
+        r'\(?\d{3,5}\)?[-.\s]?'      # area code
+        r'\d{3,4}[-.\s]?'            # first group
+        r'\d{3,4}',                  # second group
+        phone_text
+    )
     if phone_match:
-        contact["phone"] = phone_match.group()
+        contact["phone"] = phone_match.group().strip()
+
+    # Also try matching on normalized text directly (handles formats like +91 98765 43210)
+    if "phone" not in contact:
+        phone_match2 = re.search(
+            r'(?:\+?\d{1,3}[-.\s]?)?'
+            r'\(?\d{3,5}\)?[-.\s]?'
+            r'\d{3,4}[-.\s]?'
+            r'\d{3,4}',
+            normalized
+        )
+        if phone_match2:
+            contact["phone"] = phone_match2.group().strip()
 
     # LinkedIn
-    linkedin_match = re.search(r'linkedin\.com/in/[\w-]+', text, re.IGNORECASE)
+    linkedin_text = re.sub(r'\s*/\s*', '/', normalized)  # fix "linkedin . com / in / user"
+    linkedin_text = re.sub(r'\s*\.\s*', '.', linkedin_text)
+    linkedin_match = re.search(r'linkedin\.com/in/[\w-]+', linkedin_text, re.IGNORECASE)
     if linkedin_match:
         contact["linkedin"] = linkedin_match.group()
 
     # GitHub
-    github_match = re.search(r'github\.com/[\w-]+', text, re.IGNORECASE)
+    github_text = linkedin_text  # reuse the same cleaned text
+    github_match = re.search(r'github\.com/[\w-]+', github_text, re.IGNORECASE)
     if github_match:
         contact["github"] = github_match.group()
 

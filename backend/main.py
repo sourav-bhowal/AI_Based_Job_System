@@ -107,7 +107,7 @@ class MatchJobRequest(BaseModel):
     job_text: Optional[str] = None
 
 
-# ========== Helper ==========
+# ========== Helpers ==========
 
 def risk_level(score):
     if score < 30:
@@ -116,6 +116,20 @@ def risk_level(score):
         return "Medium Risk"
     else:
         return "High Risk"
+
+
+def _rebuild_resume_data(resume_row: dict) -> dict:
+    """Rebuild a resume_data dict from a DB row, suitable for matching / ATS scoring."""
+    skills = json.loads(resume_row["skills"]) if resume_row["skills"] else {}
+    return {
+        "text": resume_row["extracted_text"] or "",
+        "skills": skills,
+        "education": json.loads(resume_row["education"]) if resume_row["education"] else [],
+        "experience_years": int(resume_row["experience"]) if resume_row["experience"] else 0,
+        "contact": json.loads(resume_row["contact"]) if resume_row.get("contact") else {},
+        "total_skills_found": sum(len(v) for v in skills.values()),
+        "word_count": len((resume_row["extracted_text"] or "").split()),
+    }
 
 
 # ========== Auth Routes ==========
@@ -270,12 +284,13 @@ async def upload_resume(file: UploadFile = File(...), user=Depends(get_current_u
     # Save to database
     conn = get_db()
     cursor = conn.execute(
-        """INSERT INTO resumes (user_id, filename, extracted_text, skills, experience, education)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (user["id"], file.filename, resume_data["text"][:5000],
+        """INSERT INTO resumes (user_id, filename, extracted_text, skills, experience, education, contact)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (user["id"], file.filename, resume_data["text"][:10000],
          json.dumps(resume_data["skills"]),
          str(resume_data["experience_years"]),
-         json.dumps(resume_data["education"]))
+         json.dumps(resume_data["education"]),
+         json.dumps(resume_data["contact"]))
     )
     resume_id = cursor.lastrowid
     conn.commit()
@@ -307,15 +322,7 @@ def match_resume_to_job(req: MatchJobRequest, user=Depends(get_current_user)):
     if not resume_row:
         raise HTTPException(404, "Resume not found")
 
-    resume_data = {
-        "text": resume_row["extracted_text"],
-        "skills": json.loads(resume_row["skills"]) if resume_row["skills"] else {},
-        "education": json.loads(resume_row["education"]) if resume_row["education"] else [],
-        "experience_years": int(resume_row["experience"]) if resume_row["experience"] else 0,
-        "total_skills_found": 0,
-        "word_count": len(resume_row["extracted_text"].split()) if resume_row["extracted_text"] else 0,
-    }
-    resume_data["total_skills_found"] = sum(len(v) for v in resume_data["skills"].values())
+    resume_data = _rebuild_resume_data(resume_row)
 
     # Get job text
     if req.job_url:
@@ -520,15 +527,7 @@ def api_generate_match_pdf(req: MatchJobRequest, user=Depends(get_current_user))
     if not resume_row:
         raise HTTPException(404, "Resume not found")
 
-    resume_data = {
-        "text": resume_row["extracted_text"],
-        "skills": json.loads(resume_row["skills"]) if resume_row["skills"] else {},
-        "education": json.loads(resume_row["education"]) if resume_row["education"] else [],
-        "experience_years": int(resume_row["experience"]) if resume_row["experience"] else 0,
-        "total_skills_found": 0,
-        "word_count": len(resume_row["extracted_text"].split()) if resume_row["extracted_text"] else 0,
-    }
-    resume_data["total_skills_found"] = sum(len(v) for v in resume_data["skills"].values())
+    resume_data = _rebuild_resume_data(resume_row)
 
     if req.job_url:
         job = scrape_job(req.job_url)
