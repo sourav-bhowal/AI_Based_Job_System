@@ -17,17 +17,13 @@ export default function ScannerForm() {
   const [isDownloadingPdf, startPdfDownload] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ScanResult | null>(null);
+  const [scannedUrl, setScannedUrl] = useState<string | null>(null);
 
   const handleDownloadPdf = async (url: string) => {
     startPdfDownload(async () => {
       const res = await downloadScanPdfAction(url);
-      if (res.success && res.pdfBase64) {
-        const link = document.createElement("a");
-        link.href = `data:application/pdf;base64,${res.pdfBase64}`;
-        link.download = "scan_report.pdf";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+      if (res.success && res.downloadUrl) {
+        window.open(res.downloadUrl, '_blank');
       } else {
         alert(res.error || "Failed to download PDF.");
       }
@@ -37,6 +33,9 @@ export default function ScannerForm() {
   async function clientAction(formData: FormData) {
     setError(null);
     setResult(null);
+    setScannedUrl(null);
+    
+    const url = formData.get("scan-url") as string;
 
     startTransition(async () => {
       const actionRes = activeTab === "url" 
@@ -47,6 +46,7 @@ export default function ScannerForm() {
         
       if (actionRes.success) {
         setResult(actionRes.data);
+        if (activeTab === "url" && url) setScannedUrl(url);
       } else {
         setError(actionRes.error);
       }
@@ -262,9 +262,7 @@ export default function ScannerForm() {
               <button
                 type="button"
                 onClick={() => {
-                   const form = document.querySelector('form') as HTMLFormElement;
-                   const urlInput = form.querySelector('[name="scan-url"]') as HTMLInputElement;
-                   if (urlInput?.value) handleDownloadPdf(urlInput.value);
+                   if (scannedUrl) handleDownloadPdf(scannedUrl);
                 }}
                 disabled={isDownloadingPdf}
                 className="flex items-center gap-2 rounded-xl border border-[var(--accent)]/30 bg-[var(--background)] px-5 py-2.5 text-sm font-semibold text-[var(--accent)] shadow-[var(--shadow-sm)] transition-all duration-200 hover:bg-[var(--accent-subtle)] disabled:opacity-50"

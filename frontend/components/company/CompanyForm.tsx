@@ -12,6 +12,7 @@ export default function CompanyForm() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CompanyCheckResult | null>(null);
+  const [searchedValues, setSearchedValues] = useState<{ name: string; domain?: string } | null>(null);
 
   async function clientAction(formData: FormData) {
     setError(null);
@@ -23,6 +24,10 @@ export default function CompanyForm() {
         
       if (actionRes.success) {
         setResult(actionRes.data);
+        setSearchedValues({
+          name: formData.get("company_name") as string,
+          domain: (formData.get("domain") as string) || undefined
+        });
       } else {
         setError(actionRes.error);
       }
@@ -68,9 +73,37 @@ export default function CompanyForm() {
 
       {result && (
         <div className="mt-8 space-y-6 animate-fade-in-up">
-          <Card padding="lg">
-            <div className="flex items-center justify-between">
+          {result.community_data?.is_blacklisted && (
+            <div className="rounded-xl bg-[var(--danger)]/10 border border-[var(--danger)]/20 p-5 flex flex-col sm:flex-row items-center gap-4 text-[var(--danger)] shadow-sm">
+              <AlertTriangle className="h-10 w-10 shrink-0" />
               <div>
+                <h3 className="font-bold text-lg">CRITICAL WARNING: COMPANY BLACKLISTED</h3>
+                <p className="text-sm opacity-90 font-medium">This company has been reported {result.community_data.report_count} times by the community and is flagged as a high-risk scam.</p>
+              </div>
+            </div>
+          )}
+
+          <Card padding="lg" className="relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: trustColor(result.trust_score) }} />
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pt-2">
+              
+              <div className="flex-1">
+                {searchedValues && (
+                  <div className="mb-4 bg-[var(--background)] border border-[var(--card-border)] rounded-xl p-4 inline-block shadow-sm pr-12">
+                     <p className="text-xs font-bold uppercase tracking-widest text-[var(--muted)] mb-1">Entity Scanned</p>
+                     <p className="text-xl text-[var(--foreground)] font-extrabold tracking-tight flex items-center gap-2">
+                       <Building className="h-5 w-5 text-[var(--accent)]" /> 
+                       {searchedValues.name}
+                     </p>
+                     {searchedValues.domain && (
+                       <p className="text-sm font-medium text-[var(--muted)] flex items-center gap-1.5 mt-1 border-t border-[var(--card-border)] pt-1 w-fit">
+                         <Globe className="h-3.5 w-3.5" /> 
+                         {searchedValues.domain}
+                       </p>
+                     )}
+                  </div>
+                )}
+              
                 <p className="text-sm font-bold uppercase tracking-wide text-[var(--muted)] mb-1">Assessed Trust Level</p>
                 <h2 className="text-2xl font-bold flex items-center gap-2">
                   {result.trust_level}
@@ -83,7 +116,7 @@ export default function CompanyForm() {
                   )}
                 </h2>
               </div>
-              <div className="flex h-20 w-20 items-center justify-center rounded-2xl border-4 shadow-sm" style={{ borderColor: trustColor(result.trust_score) }}>
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl border-4 shadow-sm shrink-0" style={{ borderColor: trustColor(result.trust_score) }}>
                 <span className="text-3xl font-extrabold tracking-tighter" style={{ color: trustColor(result.trust_score) }}>{result.trust_score}</span>
               </div>
             </div>
@@ -92,21 +125,21 @@ export default function CompanyForm() {
           <Card>
             <h3 className="mb-5 text-lg font-bold text-[var(--foreground)]">Metric Breakdown</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {Object.entries(result.breakdown).map(([key, val]) => (
+              {Object.entries(result.details).map(([key, val]) => (
                 <div key={key} className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4 shadow-sm">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-2">{key.replace(/_/g, " ").replace(/score/g, "").trim()}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-2">{key.replace(/_/g, " ").trim()}</div>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 h-2.5 rounded-full bg-[var(--card-border)]/50 overflow-hidden">
-                      <div className="h-2.5 rounded-full transition-all duration-700 ease-out" style={{ width: `${val}%`, backgroundColor: trustColor(val) }} />
+                      <div className="h-2.5 rounded-full transition-all duration-700 ease-out" style={{ width: `${val.score}%`, backgroundColor: trustColor(val.score) }} />
                     </div>
-                    <span className="text-sm font-bold w-6 text-right" style={{ color: trustColor(val) }}>{val}</span>
+                    <span className="text-sm font-bold w-6 text-right" style={{ color: trustColor(val.score) }}>{val.score}</span>
                   </div>
                 </div>
               ))}
             </div>
           </Card>
 
-          {result.details && result.details.length > 0 && (
+          {result.details && (
             <Card>
               <h3 className="mb-4 text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-subtle)] text-[var(--accent)]">
@@ -115,27 +148,21 @@ export default function CompanyForm() {
                 Detailed Findings
               </h3>
               <ul className="space-y-2">
-                {result.details.map((d, i) => (
-                  <li key={i} className={`text-sm font-medium flex items-start gap-2 p-3 rounded-lg border ${
-                    d.type === "danger" ? "border-[var(--danger)]/20 bg-[var(--danger-subtle)] text-[var(--danger)]"
-                    : d.type === "warning" ? "border-[var(--warning)]/20 bg-[var(--warning-subtle)] text-[var(--warning)]"
-                    : "border-[var(--success)]/20 bg-[var(--success-subtle)] text-[var(--success)]"
-                  }`}>
-                    <span className="mt-0.5">{d.type === "danger" ? "⚠" : d.type === "warning" ? "⚡" : "✓"}</span> {d.message}
+                {[
+                  ...(result.details.domain?.reasons || []).map(msg => ({ msg, source: "Domain" })),
+                  ...(result.details.email?.reason ? [{ msg: result.details.email.reason, source: "Email" }] : []),
+                  ...(result.details.name?.signals || []).map(msg => ({ msg, source: "Name" })),
+                  ...(result.details.community?.reasons || []).map(msg => ({ msg, source: "Community" }))
+                ].map((item, i) => (
+                  <li key={i} className="text-sm font-medium flex items-start gap-2 p-3 rounded-lg border border-[var(--card-border)] bg-[var(--background)] text-[var(--foreground)]">
+                    <span className="mt-0.5 text-[var(--accent)]">●</span> 
+                    <span>
+                      <strong className="text-[var(--accent)] mr-1">{item.source}:</strong> 
+                      {item.msg}
+                    </span>
                   </li>
                 ))}
               </ul>
-            </Card>
-          )}
-
-          {result.community_data?.is_blacklisted && (
-            <Card variant="warning" className="border-[var(--danger)]/30">
-              <h3 className="mb-3 text-lg font-bold text-[var(--danger)] flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" /> Blacklisted Company
-              </h3>
-              <p className="text-sm text-[var(--danger)]/90">
-                This company has been blacklisted by the community with {result.community_data.total_reports} report(s).
-              </p>
             </Card>
           )}
         </div>

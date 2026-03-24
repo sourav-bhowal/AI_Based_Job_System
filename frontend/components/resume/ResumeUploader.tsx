@@ -34,30 +34,22 @@ export default function ResumeUploader({
   const [isMatching, startMatch] = useTransition();
   const [matchError, setMatchError] = useState<string | null>(null);
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [matchedParams, setMatchedParams] = useState<{jobUrl?: string; jobText?: string} | null>(null);
   
   const [isDownloadingPdf, startPdfDownload] = useTransition();
 
   const handleDownloadPdf = () => {
-    if (!selectedResumeId) return;
+    if (!selectedResumeId || !matchedParams) return;
     
     startPdfDownload(async () => {
-      const form = document.querySelector('form') as HTMLFormElement;
-      const jobUrlInput = form?.querySelector('[name="job_url"]') as HTMLInputElement;
-      const jobTextInput = form?.querySelector('[name="job_text"]') as HTMLTextAreaElement;
-      
       const res = await downloadMatchPdfAction(
         selectedResumeId,
-        jobUrlInput?.value || undefined,
-        jobTextInput?.value || undefined
+        matchedParams.jobUrl || undefined,
+        matchedParams.jobText || undefined
       );
       
-      if (res.success && res.pdfBase64) {
-        const link = document.createElement("a");
-        link.href = `data:application/pdf;base64,${res.pdfBase64}`;
-        link.download = "match_report.pdf";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+      if (res.success && res.downloadUrl) {
+        window.open(res.downloadUrl, '_blank');
       } else {
         alert(res.error || "Failed to download PDF.");
       }
@@ -89,10 +81,12 @@ export default function ResumeUploader({
     });
   }
 
-  // Handle Match Form
   async function handleMatchForm(formData: FormData) {
     setMatchError(null);
     setMatchResult(null);
+
+    const jobUrl = formData.get("job_url") as string;
+    const jobText = formData.get("job_text") as string;
 
     startMatch(async () => {
       const res = await matchResumeAction(null, formData);
@@ -100,6 +94,7 @@ export default function ResumeUploader({
 
       if (res.success) {
         setMatchResult(res.data);
+        setMatchedParams({ jobUrl, jobText });
       } else {
         setMatchError(res.error);
       }
