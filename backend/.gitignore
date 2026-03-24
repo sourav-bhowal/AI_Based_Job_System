@@ -4,5 +4,3 @@
 ai_detector_bert
 .env
 /__pycache__
-/database/*.db
-*.db
