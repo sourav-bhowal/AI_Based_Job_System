@@ -15,12 +15,18 @@ export async function scanUrlAction(
   const url = formData.get("scan-url") as string;
   
   try {
-    const data = await scanUrlSSR(url);
+    const data = await scanUrlSSR(url) as any;
+    if (data && data.success === false) {
+      if (data.error === "SCRAPE_FAILED") {
+        return { success: false, error: "SCRAPE_FAILED" };
+      }
+      return { success: false, error: data.message || data.error || "Failed to parse job from URL" };
+    }
     return { success: true, data };
   } catch (error: any) {
     let msg = error.message || "Failed to scan URL";
     if (msg.includes("Playwright") || msg.toLowerCase().includes("unable to fetch") || msg.includes("Timeout")) {
-      msg = "Scraping blocked by the host site (e.g., LinkedIn). Please paste the job text manually.";
+      return { success: false, error: "SCRAPE_FAILED" };
     }
     return { success: false, error: msg };
   }

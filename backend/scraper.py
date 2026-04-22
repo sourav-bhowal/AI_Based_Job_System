@@ -128,16 +128,23 @@ def extract_job_description(soup: BeautifulSoup) -> str:
 def scrape_job(url: str):
     url = validate_job_url(url)
 
-    # Fetch rendered HTML with Playwright
-    html = _fetch_url(url)
+    try:
+        # Fetch rendered HTML with Playwright
+        html = _fetch_url(url)
 
-    # Parse the HTML content using BeautifulSoup
-    soup = BeautifulSoup(html, "html.parser")
+        # Parse the HTML content using BeautifulSoup
+        soup = BeautifulSoup(html, "html.parser")
 
-    # Extract the text content from the page
-    text = extract_job_description(soup)
-    if not text:
-        raise RuntimeError("The provided page does not contain readable text content")
+        # Extract the text content from the page
+        text = extract_job_description(soup)
+        if not text:
+            raise RuntimeError("The provided page does not contain readable text content")
+    except Exception as e:
+        return {
+            "success": False,
+            "error": "SCRAPE_FAILED",
+            "message": "Unable to fetch job automatically. Please paste job description manually."
+        }
 
     # NER entity extraction
     try:
@@ -150,6 +157,7 @@ def scrape_job(url: str):
 
     # Return a dictionary with the job description, salary, email, and NER entities
     return {
+        "success": True,
         "description": text,
         "salary": extract_salary(text),
         "email": extract_email(text),

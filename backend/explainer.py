@@ -20,8 +20,16 @@ def explain_prediction(text: str, num_features: int = 10) -> dict:
     current_model, current_vectorizer = scam_model.get_model_objects()
 
     # Get prediction
-    X = current_vectorizer.transform([text])
-    prediction = current_model.predict(X)[0]
+    X_text = current_vectorizer.transform([text])
+    
+    import scipy.sparse as sp
+    if hasattr(current_model, "n_features_in_") and current_model.n_features_in_ > X_text.shape[1]:
+        extra = np.zeros((1, current_model.n_features_in_ - X_text.shape[1]))
+        X_pred = sp.hstack([X_text, extra])
+    else:
+        X_pred = X_text
+
+    prediction = current_model.predict(X_pred)[0]
     legit_prob, scam_prob = scam_model.predict_probabilities(text)
 
     # Get feature names and their weights
@@ -29,7 +37,7 @@ def explain_prediction(text: str, num_features: int = 10) -> dict:
 
     # Get model coefficients (for LogisticRegression)
     if hasattr(current_model, 'coef_'):
-        coefficients = current_model.coef_[0]
+        coefficients = current_model.coef_[0][:X_text.shape[1]]
     else:
         # Fallback for non-linear models
         return {
@@ -38,10 +46,12 @@ def explain_prediction(text: str, num_features: int = 10) -> dict:
             "legit_probability": round(float(legit_prob) * 100, 1),
             "explanation": "Model explanation not available for this model type",
             "top_features": [],
+            "top_words": [],
+            "scores": [],
         }
 
     # Get the TF-IDF values for this specific text
-    tfidf_values = X.toarray()[0]
+    tfidf_values = X_text.toarray()[0]
 
     # Calculate feature contributions: coefficient * tfidf_value
     contributions = coefficients * tfidf_values
@@ -57,6 +67,8 @@ def explain_prediction(text: str, num_features: int = 10) -> dict:
             "legit_probability": round(float(legit_prob) * 100, 1),
             "explanation": "No significant features found in the text",
             "top_features": [],
+            "top_words": [],
+            "scores": [],
         }
 
     # Sort by absolute contribution
@@ -117,6 +129,9 @@ def explain_prediction(text: str, num_features: int = 10) -> dict:
     except Exception:
         ai_detection = None
 
+    top_words = [item["word"] for item in scam_indicators[:5]]
+    scores = [item["contribution"] for item in scam_indicators[:5]]
+
     return {
         "prediction": "scam" if prediction == 1 else "legitimate",
         "scam_probability": round(float(scam_prob) * 100, 1),
@@ -124,6 +139,8 @@ def explain_prediction(text: str, num_features: int = 10) -> dict:
         "confidence": round(float(max(scam_prob, legit_prob)) * 100, 1),
         "top_scam_indicators": scam_indicators[:num_features],
         "top_legit_indicators": legit_indicators[:num_features],
+        "top_words": top_words,
+        "scores": scores,
         "red_flags": red_flags,
         "entity_analysis": entity_analysis,
         "ai_detection": ai_detection,
