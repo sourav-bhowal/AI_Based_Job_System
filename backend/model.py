@@ -1,6 +1,8 @@
 import joblib
 import os
 import math
+import scipy.sparse as sp
+import numpy as np
 
 # Get the directory where this script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,10 +39,17 @@ def _sigmoid(value: float) -> float:
     return z / (1 + z)
 
 
-def predict_probabilities(text: str):
+def predict_probabilities(text: str, telecommuting: int = 0, has_company_logo: int = 0, has_questions: int = 0):
     """Return [legit_probability, scam_probability] for a text sample."""
     current_model, current_vectorizer = get_model_objects()
-    X = current_vectorizer.transform([text])
+    X_text = current_vectorizer.transform([text])
+
+    # Ensure backward compatibility: pad with extra features if the model expects them
+    if hasattr(current_model, "n_features_in_") and current_model.n_features_in_ > X_text.shape[1]:
+        extra = np.array([[telecommuting, has_company_logo, has_questions]])
+        X = sp.hstack([X_text, extra])
+    else:
+        X = X_text
 
     if hasattr(current_model, "predict_proba"):
         probabilities = current_model.predict_proba(X)[0]
@@ -59,7 +68,7 @@ def predict_probabilities(text: str):
     return legit_prob, scam_prob
 
 # Function to predict scam probability
-def predict_scam(text: str):
+def predict_scam(text: str, telecommuting: int = 0, has_company_logo: int = 0, has_questions: int = 0):
     """Predict the probability of a job posting being a scam."""
-    _, scam_prob = predict_probabilities(text)
+    _, scam_prob = predict_probabilities(text, telecommuting, has_company_logo, has_questions)
     return scam_prob

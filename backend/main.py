@@ -172,6 +172,9 @@ def scan_job_url(req: JobRequest, user=Depends(get_optional_user)):
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    if job.get("success") is False:
+        return job
+
     description = (job.get("description") or "").strip()
     if not description:
         raise HTTPException(status_code=422, detail="No readable job description found at the provided URL")
@@ -327,6 +330,8 @@ def match_resume_to_job(req: MatchJobRequest, user=Depends(get_current_user)):
     # Get job text
     if req.job_url:
         job = scrape_job(req.job_url)
+        if job.get("success") is False:
+            raise HTTPException(400, job.get("message"))
         job_text = job["description"]
     elif req.job_text:
         job_text = req.job_text
@@ -485,6 +490,8 @@ def api_generate_scan_pdf(req: JobRequest, user=Depends(get_optional_user)):
     """Generate a PDF report for a job scan, upload it to S3, and return a pre-signed download URL."""
     # Scan the job
     job = scrape_job(req.url)
+    if job.get("success") is False:
+        raise HTTPException(400, job.get("message"))
     score = compute_risk(job["description"], job["salary"], job["email"])
     level = risk_level(score)
     explanation = explain_prediction(job["description"])
@@ -531,6 +538,8 @@ def api_generate_match_pdf(req: MatchJobRequest, user=Depends(get_current_user))
 
     if req.job_url:
         job = scrape_job(req.job_url)
+        if job.get("success") is False:
+            raise HTTPException(400, job.get("message"))
         job_text = job["description"]
     elif req.job_text:
         job_text = req.job_text

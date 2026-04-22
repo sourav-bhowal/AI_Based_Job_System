@@ -12,6 +12,8 @@ Saves the best model and all metrics to the database.
 """
 
 import pandas as pd
+import scipy.sparse as sp
+import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -63,31 +65,55 @@ def train_all_models():
     """Train and compare all models. Returns metrics and best model info."""
     df = load_and_prepare_data()
 
-    X = df["text"]
+    X_text = df["text"]
+    X_struct = df[['telecommuting', 'has_company_logo', 'has_questions']].fillna(0).astype(int).values
     y = df["fraudulent"]
 
     # Split data
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+    X_train_txt, X_test_txt, X_train_str, X_test_str, y_train, y_test = train_test_split(
+        X_text, X_struct, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    print(f"\nTraining set: {len(X_train)} | Test set: {len(X_test)}")
+    print(f"\nTraining set: {len(X_train_txt)} | Test set: {len(X_test_txt)}")
 
     # Vectorize
     print("\nVectorizing text...")
     vectorizer = TfidfVectorizer(stop_words="english", max_features=5000, ngram_range=(1, 2))
-    X_train_vec = vectorizer.fit_transform(X_train)
-    X_test_vec = vectorizer.transform(X_test)
+    X_train_vec = vectorizer.fit_transform(X_train_txt)
+    X_test_vec = vectorizer.transform(X_test_txt)
+    
+    # Combine features
+    print("Combining structured and text features...")
+    X_train_comb = sp.hstack([X_train_vec, X_train_str])
+    X_test_comb = sp.hstack([X_test_vec, X_test_str])
+
+    from imblearn.over_sampling import SMOTE
+    print("\nApplying SMOTE strictly to training data to handle class imbalance...")
+    smote = SMOTE(random_state=42)
+    X_train_smote, y_train_smote = smote.fit_resample(X_train_comb, y_train)
+    print(f"Original training shape: {X_train_comb.shape}, resampled shape: {X_train_smote.shape}")
 
     # Define models — class_weight="balanced" handles the 95:5 scam imbalance
     # CalibratedClassifierCV wraps LinearSVC to give proper predict_proba() support
     from sklearn.calibration import CalibratedClassifierCV
+    from sklearn.ensemble import VotingClassifier
+
+    lr = LogisticRegression(max_iter=1000, random_state=42, class_weight="balanced")
+    rf = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1, class_weight="balanced")
+    svm = CalibratedClassifierCV(LinearSVC(max_iter=2000, random_state=42, class_weight="balanced"), cv=3)
+
+    voting_clf = VotingClassifier(
+        estimators=[('lr', lr), ('rf', rf), ('svm', svm)],
+        voting='soft'
+    )
+
     models = {
-        "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42, class_weight="balanced"),
-        "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1, class_weight="balanced"),
-        "SVM (Linear)": CalibratedClassifierCV(LinearSVC(max_iter=2000, random_state=42, class_weight="balanced"), cv=3),
+        "Logistic Regression": lr,
+        "Random Forest": rf,
+        "SVM (Linear)": svm,
         "Naive Bayes": MultinomialNB(),
         "Gradient Boosting": GradientBoostingClassifier(n_estimators=100, random_state=42),
+        "Ensemble (Voting)": voting_clf,
     }
 
     results = []
@@ -100,11 +126,19 @@ def train_all_models():
         print(f"Training: {name}")
         print(f"{'=' * 50}")
 
-        # Train
-        model.fit(X_train_vec, y_train)
+        import copy
+        # Train base version to get before metrics
+        base_model = copy.deepcopy(model)
+        base_model.fit(X_train_comb, y_train)
+        y_pred_base = base_model.predict(X_test_comb)
+        f1_base = f1_score(y_test, y_pred_base, zero_division=0)
+        rec_base = recall_score(y_test, y_pred_base, zero_division=0)
 
-        # Predict
-        y_pred = model.predict(X_test_vec)
+        # Train SMOTE version
+        model.fit(X_train_smote, y_train_smote)
+        
+        # Predict using SMOTE model
+        y_pred = model.predict(X_test_comb)
 
         # Calculate metrics
         acc = accuracy_score(y_test, y_pred)
@@ -113,6 +147,13 @@ def train_all_models():
         f1 = f1_score(y_test, y_pred, zero_division=0)
         cm = confusion_matrix(y_test, y_pred).tolist()
 
+        print(f"--- SMOTE Comparison ({name}) ---")
+        print(f"Base F1-Score: {f1_base * 100:.2f}% | Base Recall: {rec_base * 100:.2f}%")
+        print(f"SMOTE F1-Score: {f1 * 100:.2f}% | SMOTE Recall: {rec * 100:.2f}%")
+        print(f"Improvement: {(f1 - f1_base) * 100:.2f} Pts F1, {(rec - rec_base) * 100:.2f} Pts Recall")
+        print("---------------------------------")
+
+        print(f"\nFinal Detailed Metrics:")
         print(f"Accuracy: {acc * 100:.2f}%")
         print(f"Precision: {prec * 100:.2f}%")
         print(f"Recall: {rec * 100:.2f}%")
@@ -128,8 +169,8 @@ def train_all_models():
             "recall": round(rec * 100, 2),
             "f1_score": round(f1 * 100, 2),
             "confusion_matrix": cm,
-            "training_samples": len(X_train),
-            "test_samples": len(X_test),
+            "training_samples": len(X_train_txt),
+            "test_samples": len(X_test_txt),
             "trained_at": datetime.now().isoformat(),
         }
         results.append(model_result)

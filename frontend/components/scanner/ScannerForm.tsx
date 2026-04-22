@@ -48,7 +48,12 @@ export default function ScannerForm() {
         setResult(actionRes.data);
         if (activeTab === "url" && url) setScannedUrl(url);
       } else {
-        setError(actionRes.error);
+        if (actionRes.error === "SCRAPE_FAILED") {
+          setError("Unable to automatically fetch the job posting due to site protections. Please paste the job description below to continue the analysis.");
+          setActiveTab("text");
+        } else {
+          setError(actionRes.error);
+        }
       }
     });
   }
