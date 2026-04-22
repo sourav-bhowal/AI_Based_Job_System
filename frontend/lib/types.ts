@@ -88,12 +88,30 @@ export interface SalaryAnalysis {
   analysis: string | string[];
 }
 
+export interface CompanyTrust {
+  company_name?: string;
+  trust_score: number;
+  trust_level: string;
+  confidence?: number;
+  details?: {
+    domain?: { score: number; confidence: number; reasons: string[] };
+    email?: { score: number; confidence: number; reason: string };
+    name?: { score: number; confidence: number; signals: string[] };
+    community?: { score: number; confidence: number; reasons: string[] };
+  };
+  community_data?: {
+    report_count: number;
+    is_blacklisted: boolean;
+  };
+}
+
 export interface ScanResult {
   risk_score: number;
   risk_level: "Safe" | "Medium Risk" | "High Risk";
   job_details?: JobDetails;
   explanation: Explanation;
   salary_analysis: SalaryAnalysis;
+  company_trust?: CompanyTrust | null;
 }
 
 export interface ScanHistoryItem {
@@ -149,6 +167,16 @@ export interface ResumeUploadResult {
     github?: string;
   };
   word_count: number;
+  quality_score?: number;
+  quality_feedback?: { type: "good" | "warning" | "error"; message: string }[];
+  ner_entities?: {
+    name?: string | null;
+    organizations?: string[];
+    locations?: string[];
+    dates?: string[];
+    skills_from_ner?: string[];
+    entity_count?: number;
+  };
 }
 
 export interface ResumeListItem {

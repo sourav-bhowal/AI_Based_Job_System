@@ -7,7 +7,7 @@ import type { ResumeListItem, ResumeUploadResult, MatchResult } from "@/lib/type
 import LoadingSpinner from "@/components/LoadingSpinner";
 import ErrorDisplay from "@/components/ErrorDisplay";
 import Card from "@/components/Card";
-import { UploadCloud, CheckCircle2, FileText, Target, AlertTriangle, Lightbulb, BookOpen, FileDown } from "lucide-react";
+import { UploadCloud, CheckCircle2, FileText, Target, AlertTriangle, Lightbulb, BookOpen, FileDown, Mail, Phone, Linkedin, Github, GraduationCap, User, Star, MapPin, Building2 } from "lucide-react";
 
 export default function ResumeUploader({
   initialResumes,
@@ -101,6 +101,9 @@ export default function ResumeUploader({
     });
   }
 
+  const qualityColor = (score: number) =>
+    score >= 75 ? "var(--success)" : score >= 50 ? "var(--warning)" : "var(--danger)";
+
   return (
     <>
       {/* Upload Dropzone */}
@@ -110,7 +113,7 @@ export default function ResumeUploader({
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] transition-transform duration-300 group-hover:scale-110">
             <UploadCloud className="h-7 w-7" />
           </div>
-          <span className="mb-2 text-base font-semibold text-[var(--foreground)] group-hover:text-[var(--accent)]">Click to document</span>
+          <span className="mb-2 text-base font-semibold text-[var(--foreground)] group-hover:text-[var(--accent)]">Click to upload</span>
           <span className="text-sm font-medium text-[var(--muted)]">PDF, DOCX, or TXT (Max 5MB)</span>
           <span className="mt-4 rounded-lg bg-[var(--card-border)]/50 px-3 py-1 text-xs text-[var(--muted)]">Skills & experience are automatically extracted</span>
           <input type="file" accept=".pdf,.docx,.doc,.txt" onChange={handleUpload} className="hidden" disabled={isUploading} />
@@ -127,7 +130,15 @@ export default function ResumeUploader({
             <CheckCircle2 className="h-5 w-5 text-[var(--success)]" />
             File Parsed: {uploadResult.filename}
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-[var(--success)]/20 pt-4">
+
+          {/* Quality Score + Stats Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-[var(--success)]/20 pt-4">
+            {uploadResult.quality_score != null && (
+              <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-3 text-center">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Resume Score</div>
+                <div className="text-3xl font-extrabold" style={{ color: qualityColor(uploadResult.quality_score) }}>{uploadResult.quality_score}<span className="text-base text-[var(--muted)]">/100</span></div>
+              </div>
+            )}
             {[
               { label: "Skills Found", value: uploadResult.total_skills_found },
               { label: "Experience", value: `${uploadResult.experience_years}y` },
@@ -139,6 +150,47 @@ export default function ResumeUploader({
               </div>
             ))}
           </div>
+
+          {/* Contact Info */}
+          {uploadResult.contact && Object.keys(uploadResult.contact).length > 0 && (
+            <div className="mt-5 rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4">
+              <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--muted)] mb-3 flex items-center gap-1.5"><User className="h-3.5 w-3.5" /> Contact Information</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {uploadResult.contact.name && <div className="flex items-center gap-2 text-sm text-[var(--foreground)]"><User className="h-4 w-4 text-[var(--accent)]" />{uploadResult.contact.name}</div>}
+                {uploadResult.contact.email && <div className="flex items-center gap-2 text-sm text-[var(--foreground)]"><Mail className="h-4 w-4 text-[var(--accent)]" />{uploadResult.contact.email}</div>}
+                {uploadResult.contact.phone && <div className="flex items-center gap-2 text-sm text-[var(--foreground)]"><Phone className="h-4 w-4 text-[var(--accent)]" />{uploadResult.contact.phone}</div>}
+                {uploadResult.contact.linkedin && <div className="flex items-center gap-2 text-sm text-[var(--foreground)]"><Linkedin className="h-4 w-4 text-[var(--accent)]" />{uploadResult.contact.linkedin}</div>}
+                {uploadResult.contact.github && <div className="flex items-center gap-2 text-sm text-[var(--foreground)]"><Github className="h-4 w-4 text-[var(--accent)]" />{uploadResult.contact.github}</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Education */}
+          {uploadResult.education && uploadResult.education.length > 0 && (
+            <div className="mt-4 rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4">
+              <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--muted)] mb-3 flex items-center gap-1.5"><GraduationCap className="h-3.5 w-3.5" /> Education</h4>
+              <ul className="space-y-1.5">
+                {uploadResult.education.map((e, i) => (
+                  <li key={i} className="text-sm text-[var(--foreground)] flex items-start gap-2"><span className="text-[var(--accent)] mt-0.5">•</span>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Quality Feedback */}
+          {uploadResult.quality_feedback && uploadResult.quality_feedback.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--muted)] flex items-center gap-1.5"><Star className="h-3.5 w-3.5" /> Resume Insights</h4>
+              {uploadResult.quality_feedback.map((f, i) => (
+                <div key={i} className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${f.type === "good" ? "bg-[var(--success-subtle)]/50 text-[var(--success)]" : "bg-[var(--warning-subtle)]/50 text-[var(--warning)]"}`}>
+                  {f.type === "good" ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" /> : <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />}
+                  {f.message}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Skills */}
           {uploadResult.skills && (
             <div className="mt-5 space-y-4">
               {Object.entries(uploadResult.skills).map(([cat, skills]) =>

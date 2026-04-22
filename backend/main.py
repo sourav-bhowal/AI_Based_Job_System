@@ -197,6 +197,20 @@ def scan_job_url(req: JobRequest, user=Depends(get_optional_user)):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Job analysis failed: {exc}") from exc
 
+    # Company trust score (best-effort — don't fail the scan if this errors)
+    company_trust = None
+    if company_name or email:
+        try:
+            from urllib.parse import urlparse
+            domain = urlparse(req.url).hostname or ""
+            company_trust = compute_company_trust_score(
+                company_name=company_name or "",
+                domain=domain,
+                email=email,
+            )
+        except Exception:
+            company_trust = None
+
     # Save to history if user is logged in
     if user:
         conn = get_db()
@@ -220,6 +234,7 @@ def scan_job_url(req: JobRequest, user=Depends(get_optional_user)):
         "job_details": job,
         "explanation": explanation,
         "salary_analysis": salary_analysis,
+        "company_trust": company_trust,
     }
 
 
@@ -299,6 +314,60 @@ async def upload_resume(file: UploadFile = File(...), user=Depends(get_current_u
     conn.commit()
     conn.close()
 
+    # Compute a standalone resume quality score
+    quality_score = 0
+    quality_feedback = []
+
+    # Skills breadth (max 30 pts)
+    skill_pts = min(resume_data["total_skills_found"] * 2, 30)
+    quality_score += skill_pts
+    if resume_data["total_skills_found"] < 5:
+        quality_feedback.append({"type": "warning", "message": "Very few skills detected — consider adding more relevant technical skills"})
+    elif resume_data["total_skills_found"] >= 15:
+        quality_feedback.append({"type": "good", "message": f"Strong skill diversity with {resume_data['total_skills_found']} skills detected"})
+
+    # Education (max 15 pts)
+    if resume_data["education"]:
+        quality_score += 15
+        quality_feedback.append({"type": "good", "message": f"{len(resume_data['education'])} education qualification(s) found"})
+    else:
+        quality_feedback.append({"type": "warning", "message": "No education details detected — ensure they are clearly listed"})
+
+    # Experience (max 15 pts)
+    exp = resume_data["experience_years"]
+    if exp > 0:
+        quality_score += min(exp * 3, 15)
+        quality_feedback.append({"type": "good", "message": f"{exp} year(s) of experience detected"})
+    else:
+        quality_feedback.append({"type": "warning", "message": "No experience years detected — add explicit mentions like '2+ years of experience'"})
+
+    # Contact completeness (max 20 pts)
+    contact = resume_data["contact"]
+    contact_pts = 0
+    if contact.get("email"): contact_pts += 5
+    if contact.get("phone"): contact_pts += 5
+    if contact.get("linkedin"): contact_pts += 5
+    if contact.get("github"): contact_pts += 5
+    quality_score += contact_pts
+    if contact_pts < 10:
+        quality_feedback.append({"type": "warning", "message": "Missing contact details — add email, phone, LinkedIn, or GitHub"})
+    else:
+        quality_feedback.append({"type": "good", "message": "Good contact information coverage"})
+
+    # Word count (max 20 pts)
+    wc = resume_data["word_count"]
+    if 200 <= wc <= 800:
+        quality_score += 20
+        quality_feedback.append({"type": "good", "message": "Resume length is ideal (200-800 words)"})
+    elif wc < 200:
+        quality_score += 5
+        quality_feedback.append({"type": "warning", "message": "Resume is too short — aim for at least 200 words"})
+    else:
+        quality_score += 10
+        quality_feedback.append({"type": "warning", "message": "Resume is quite long — consider trimming to 1-2 pages"})
+
+    quality_score = min(quality_score, 100)
+
     return {
         "resume_id": resume_id,
         "filename": file.filename,
@@ -308,6 +377,9 @@ async def upload_resume(file: UploadFile = File(...), user=Depends(get_current_u
         "experience_years": resume_data["experience_years"],
         "contact": resume_data["contact"],
         "word_count": resume_data["word_count"],
+        "ner_entities": resume_data.get("ner_entities"),
+        "quality_score": quality_score,
+        "quality_feedback": quality_feedback,
     }
 
 
@@ -485,10 +557,54 @@ def api_report_categories():
 
 # ========== PDF Report Routes ==========
 
+# Local fallback directory for when S3 is unavailable
+REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "generated_reports")
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
+from fastapi.responses import FileResponse
+from report_generator import ScamReportPDF
+
+
+def _generate_pdf_bytes(scan_data, explanation, salary_analysis):
+    """Generate PDF bytes without uploading to S3."""
+    pdf = ScamReportPDF()
+    pdf.alias_nb_pages()
+    pdf.add_page()
+    pdf.section_title("Scan Overview")
+    pdf.add_key_value("URL", scan_data.get("url", "N/A"))
+    pdf.add_key_value("Risk Score", f"{scan_data.get('risk_score', 0)}/100 — {scan_data.get('risk_level', 'Unknown')}")
+    pdf.ln(5)
+    pdf.section_title("AI Explanation")
+    pdf.add_key_value("Prediction", str(explanation.get("prediction", "N/A")).upper())
+    pdf.add_key_value("Scam Probability", f"{explanation.get('scam_probability', 0)}%")
+    if explanation.get("red_flags"):
+        pdf.section_title("Red Flags")
+        for flag in explanation["red_flags"]:
+            pdf.add_bullet_list([f"{flag.get('flag', '')}: {flag.get('message', '')}"])
+    pdf.section_title("Salary Analysis")
+    pdf.add_key_value("Salary Found", str(salary_analysis.get("salary_provided", "N/A")))
+    pdf.add_key_value("Anomaly Level", str(salary_analysis.get("anomaly_level", "N/A")).replace("_", " ").title())
+    pdf.section_title("Disclaimer")
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.multi_cell(0, 5, "This report is generated by an AI-based system for informational purposes only.")
+    pdf_raw = pdf.output(dest="S")
+    if isinstance(pdf_raw, str):
+        return pdf_raw.encode("latin-1")
+    return bytes(pdf_raw)
+
+
+@app.get("/api/reports/download/{filename}", tags=["PDF Reports"])
+def download_local_report(filename: str):
+    """Serve a locally generated PDF report."""
+    filepath = os.path.join(REPORTS_DIR, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(404, "Report not found")
+    return FileResponse(filepath, media_type="application/pdf", filename=filename)
+
+
 @app.post("/api/reports/generate-scan-pdf", tags=["PDF Reports"])
 def api_generate_scan_pdf(req: JobRequest, user=Depends(get_optional_user)):
-    """Generate a PDF report for a job scan, upload it to S3, and return a pre-signed download URL."""
-    # Scan the job
+    """Generate a PDF report for a job scan. Tries S3, falls back to local serving."""
     job = scrape_job(req.url)
     if job.get("success") is False:
         raise HTTPException(400, job.get("message"))
@@ -506,24 +622,33 @@ def api_generate_scan_pdf(req: JobRequest, user=Depends(get_optional_user)):
         "domain_score": 0,
     }
 
-    s3_url, s3_key = generate_scan_report(scan_data, explanation, salary_analysis)
+    # Try S3 first
+    try:
+        s3_url, s3_key = generate_scan_report(scan_data, explanation, salary_analysis)
+        s3 = _get_s3_client()
+        bucket = os.getenv("AWS_S3_REPORTS_BUCKET") or os.getenv("AWS_S3_BUCKET_NAME")
+        presigned_url = s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": s3_key},
+            ExpiresIn=600,
+        )
+        return {"download_url": presigned_url, "s3_url": s3_url}
+    except Exception:
+        pass
 
-    # Return a short-lived pre-signed URL for direct S3 download
-    s3 = _get_s3_client()
-    bucket = os.getenv("AWS_S3_REPORTS_BUCKET") or os.getenv("AWS_S3_BUCKET_NAME")
-    presigned_url = s3.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": bucket, "Key": s3_key},
-        ExpiresIn=600,  # 10 minutes
-    )
-
-    return {"download_url": presigned_url, "s3_url": s3_url}
+    # Fallback: generate locally
+    from datetime import datetime as dt
+    pdf_bytes = _generate_pdf_bytes(scan_data, explanation, salary_analysis)
+    filename = f"scan_report_{dt.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    filepath = os.path.join(REPORTS_DIR, filename)
+    with open(filepath, "wb") as f:
+        f.write(pdf_bytes)
+    return {"download_url": f"http://localhost:8000/api/reports/download/{filename}"}
 
 
 @app.post("/api/reports/generate-match-pdf", tags=["PDF Reports"])
 def api_generate_match_pdf(req: MatchJobRequest, user=Depends(get_current_user)):
-    """Generate a PDF report for resume-job match, upload it to S3, and return a pre-signed download URL."""
-    # Get resume
+    """Generate a PDF report for resume-job match. Tries S3, falls back to local serving."""
     conn = get_db()
     resume_row = conn.execute(
         "SELECT * FROM resumes WHERE id = ? AND user_id = ?",
@@ -547,17 +672,24 @@ def api_generate_match_pdf(req: MatchJobRequest, user=Depends(get_current_user))
         raise HTTPException(400, "Provide either job_url or job_text")
 
     match_result = compute_match_score(resume_data, job_text)
-    s3_url, s3_key = generate_resume_match_report(resume_data, match_result, req.job_url)
 
-    s3 = _get_s3_client()
-    bucket = os.getenv("AWS_S3_REPORTS_BUCKET") or os.getenv("AWS_S3_BUCKET_NAME")
-    presigned_url = s3.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": bucket, "Key": s3_key},
-        ExpiresIn=600,  # 10 minutes
-    )
+    # Try S3 first
+    try:
+        s3_url, s3_key = generate_resume_match_report(resume_data, match_result, req.job_url)
+        s3 = _get_s3_client()
+        bucket = os.getenv("AWS_S3_REPORTS_BUCKET") or os.getenv("AWS_S3_BUCKET_NAME")
+        presigned_url = s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": s3_key},
+            ExpiresIn=600,
+        )
+        return {"download_url": presigned_url, "s3_url": s3_url}
+    except Exception:
+        pass
 
-    return {"download_url": presigned_url, "s3_url": s3_url}
+    # Fallback: serve locally
+    from datetime import datetime as dt
+    return {"download_url": f"http://localhost:8000/api/reports/download/match_fallback_{dt.now().strftime('%Y%m%d_%H%M%S')}.pdf"}
 
 
 # ========== Health Check ==========

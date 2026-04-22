@@ -86,7 +86,8 @@ def get_domain_info(domain: str) -> dict:
 # ---------------------------
 def analyze_email(email: str, domain: str | None) -> dict:
     if not email:
-        return {"score": 50, "confidence": 0.3, "reason": "No email provided"}
+        # No email should be truly neutral — don't penalize for missing info
+        return {"score": 50, "confidence": 0.1, "reason": "No email provided"}
 
     email_domain = email.split("@")[-1].lower()
 
@@ -97,7 +98,7 @@ def analyze_email(email: str, domain: str | None) -> dict:
 
     if email_domain in free_providers:
         return {
-            "score": 40,  # not too harsh
+            "score": 40,
             "confidence": 1.0,
             "reason": "Free email provider"
         }
@@ -124,6 +125,25 @@ def analyze_email(email: str, domain: str | None) -> dict:
 
 
 # ---------------------------
+# WELL-KNOWN COMPANIES
+# ---------------------------
+WELL_KNOWN_COMPANIES = {
+    "google", "microsoft", "apple", "amazon", "meta", "facebook", "netflix",
+    "tesla", "adobe", "ibm", "intel", "nvidia", "oracle", "salesforce",
+    "uber", "airbnb", "spotify", "twitter", "linkedin", "github",
+    "samsung", "sony", "toshiba", "cisco", "dell", "hp", "lenovo",
+    "tcs", "infosys", "wipro", "hcl", "cognizant", "accenture", "deloitte",
+    "kpmg", "ey", "pwc", "mckinsey", "bain", "bcg",
+    "jpmorgan", "goldman sachs", "morgan stanley", "barclays", "hsbc",
+    "walmart", "target", "coca cola", "pepsi", "nike", "adidas",
+    "reliance", "tata", "mahindra", "bajaj", "hdfc", "icici", "sbi",
+    "flipkart", "paytm", "swiggy", "zomato", "ola", "razorpay", "zerodha",
+    "stripe", "shopify", "atlassian", "slack", "zoom", "snowflake",
+    "databricks", "cloudflare", "twilio", "paypal", "square", "block",
+}
+
+
+# ---------------------------
 # SOCIAL / NAME ANALYSIS
 # ---------------------------
 def analyze_company_name(name: str) -> dict:
@@ -132,11 +152,21 @@ def analyze_company_name(name: str) -> dict:
 
     name_lower = name.lower().strip()
 
+    # Check if it's a well-known company first
+    if name_lower in WELL_KNOWN_COMPANIES or any(wk in name_lower for wk in WELL_KNOWN_COMPANIES):
+        return {
+            "score": 95,
+            "confidence": 1.0,
+            "signals": ["Well-known established company"]
+        }
+
     suspicious_patterns = [
         r"earn\s*money",
         r"quick\s*cash",
         r"no\s*experience",
         r"guaranteed\s*income",
+        r"work\s*from\s*home",
+        r"data\s*entry",
     ]
 
     for p in suspicious_patterns:
@@ -147,9 +177,17 @@ def analyze_company_name(name: str) -> dict:
     if len(name_lower) > 3:
         score += 10
 
-    # common legit suffix
-    if any(x in name_lower for x in ["ltd", "inc", "corp", "tech", "solutions"]):
-        score += 10
+    # Common legit suffixes
+    legit_suffixes = ["ltd", "inc", "corp", "tech", "solutions", "pvt", "llc",
+                      "limited", "technologies", "systems", "group", "consulting"]
+    if any(x in name_lower for x in legit_suffixes):
+        score += 15
+        signals.append("Has corporate suffix")
+
+    # Overly short or generic names are suspicious
+    if len(name_lower) <= 2:
+        score -= 15
+        signals.append("Very short company name")
 
     return {
         "score": max(0, min(score, 100)),
@@ -251,7 +289,7 @@ def compute_community_score(company_name: str) -> dict:
     if report_count == 0:
         score = 70
         reasons.append("No community reports")
-        confidence = 0.4
+        confidence = 0.2  # Very low weight — absence of reports shouldn't strongly influence score
     elif report_count < 3:
         score = 50
         reasons.append(f"{report_count} community report(s)")
