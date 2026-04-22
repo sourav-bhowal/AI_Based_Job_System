@@ -7,7 +7,13 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import ErrorDisplay from "@/components/ErrorDisplay";
 import RiskBadge from "@/components/RiskBadge";
 import Card from "@/components/Card";
-import { Link as LinkIcon, FileText, BrainCircuit, Flag, AlertTriangle, CheckCircle2, IndianRupee, FileDown } from "lucide-react";
+import { Link as LinkIcon, FileText, BrainCircuit, Flag, AlertTriangle, CheckCircle2, IndianRupee, FileDown, Building2, MapPin, Globe, Shield, Users, Info } from "lucide-react";
+
+function formatToLPA(value: number): string {
+  if (value >= 100000) return `₹${(value / 100000).toFixed(1)} LPA`;
+  if (value >= 1000) return `₹${(value / 1000).toFixed(0)}K`;
+  return `₹${value.toLocaleString()}`;
+}
 
 type Tab = "url" | "text";
 
@@ -241,10 +247,11 @@ export default function ScannerForm() {
                 </div>
                 Salary Analysis
               </h3>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4 text-center">
                   <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Anomaly Score</div>
-                  <div className="text-2xl font-bold text-[var(--foreground)]">{(result.salary_analysis.anomaly_score * 100).toFixed(0)}%</div>
+                  <div className={`text-2xl font-bold ${result.salary_analysis.anomaly_score > 0.5 ? "text-[var(--danger)]" : result.salary_analysis.anomaly_score > 0.2 ? "text-[var(--warning)]" : "text-[var(--success)]"}`}>{(result.salary_analysis.anomaly_score * 100).toFixed(0)}%</div>
+                  {result.salary_analysis.anomaly_level && <div className="text-xs text-[var(--muted)] mt-1 capitalize">{result.salary_analysis.anomaly_level.replace(/_/g, " ")}</div>}
                 </div>
                 {result.salary_analysis.salary_provided && (
                   <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4 text-center">
@@ -255,10 +262,147 @@ export default function ScannerForm() {
                 {result.salary_analysis.ml_prediction && (
                   <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4 text-center">
                     <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">ML Predicted</div>
-                    <div className="text-lg font-bold text-[var(--accent)] mt-1">₹{result.salary_analysis.ml_prediction.predicted_salary.toLocaleString()}</div>
+                    <div className="text-lg font-bold text-[var(--accent)] mt-1">{formatToLPA(result.salary_analysis.ml_prediction.predicted_salary)}</div>
+                    {result.salary_analysis.ml_prediction.deviation_percent != null && (
+                      <div className="text-xs text-[var(--muted)] mt-1">{result.salary_analysis.ml_prediction.deviation_percent.toFixed(0)}% deviation</div>
+                    )}
+                  </div>
+                )}
+                {result.salary_analysis.detected_role && (
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4 text-center">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Detected Role</div>
+                    <div className="text-sm font-medium text-[var(--foreground)] mt-2">{result.salary_analysis.detected_role}</div>
                   </div>
                 )}
               </div>
+              {Array.isArray(result.salary_analysis.analysis) && result.salary_analysis.analysis.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {result.salary_analysis.analysis.map((msg, i) => (
+                    <div key={i} className="flex items-start gap-2 text-sm text-[var(--muted)]">
+                      <Info className="h-4 w-4 shrink-0 mt-0.5 text-[var(--warning)]" />
+                      {msg}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* Job Details */}
+          {result.job_details && (
+            <Card>
+              <h3 className="mb-4 text-xl font-bold text-[var(--foreground)] flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-subtle)] text-[var(--accent)]">
+                  <FileText className="h-5 w-5" />
+                </div>
+                Job Details
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {result.job_details.job_title && (
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Job Title</div>
+                    <div className="text-sm font-medium text-[var(--foreground)]">{result.job_details.job_title}</div>
+                  </div>
+                )}
+                {result.job_details.company_name && (
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Company</div>
+                    <div className="text-sm font-medium text-[var(--foreground)] flex items-center gap-1.5"><Building2 className="h-4 w-4 text-[var(--accent)]" />{result.job_details.company_name}</div>
+                  </div>
+                )}
+                {result.job_details.email && (
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Email Found</div>
+                    <div className="text-sm font-medium text-[var(--foreground)]">{result.job_details.email}</div>
+                  </div>
+                )}
+                {result.job_details.salary && (
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Salary</div>
+                    <div className="text-sm font-medium text-[var(--foreground)]">{result.job_details.salary}</div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {/* NER Entities */}
+          {result.explanation?.entity_analysis && result.explanation.entity_analysis.entity_count > 0 && (
+            <Card>
+              <h3 className="mb-4 text-xl font-bold text-[var(--foreground)] flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-subtle)] text-[var(--accent)]">
+                  <Globe className="h-5 w-5" />
+                </div>
+                Extracted Entities
+                <span className="ml-auto text-sm font-normal text-[var(--muted)]">{result.explanation.entity_analysis.entity_count} found</span>
+              </h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                {result.explanation.entity_analysis.companies_found?.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-2 flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> Companies</div>
+                    <div className="flex flex-wrap gap-1.5">{result.explanation.entity_analysis.companies_found.map((c, i) => (
+                      <span key={i} className="rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent)]/20 px-2.5 py-1 text-xs font-medium text-[var(--accent)]">{c}</span>
+                    ))}</div>
+                  </div>
+                )}
+                {result.explanation.entity_analysis.locations_found?.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-2 flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> Locations</div>
+                    <div className="flex flex-wrap gap-1.5">{result.explanation.entity_analysis.locations_found.map((l, i) => (
+                      <span key={i} className="rounded-lg bg-[var(--success-subtle)] border border-[var(--success)]/20 px-2.5 py-1 text-xs font-medium text-[var(--success)]">{l}</span>
+                    ))}</div>
+                  </div>
+                )}
+                {result.explanation.entity_analysis.money_found?.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-2 flex items-center gap-1"><IndianRupee className="h-3.5 w-3.5" /> Money</div>
+                    <div className="flex flex-wrap gap-1.5">{result.explanation.entity_analysis.money_found.map((m, i) => (
+                      <span key={i} className="rounded-lg bg-[var(--warning-subtle)] border border-[var(--warning)]/20 px-2.5 py-1 text-xs font-medium text-[var(--warning)]">{m}</span>
+                    ))}</div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {/* Company Trust Score */}
+          {result.company_trust && (
+            <Card>
+              <h3 className="mb-4 text-xl font-bold text-[var(--foreground)] flex items-center gap-2">
+                <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${result.company_trust.trust_score >= 60 ? "bg-[var(--success-subtle)] text-[var(--success)]" : result.company_trust.trust_score >= 30 ? "bg-[var(--warning-subtle)] text-[var(--warning)]" : "bg-[var(--danger-subtle)] text-[var(--danger)]"}`}>
+                  <Shield className="h-5 w-5" />
+                </div>
+                Company Reputation
+              </h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 mb-4">
+                <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4 text-center">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Trust Score</div>
+                  <div className={`text-3xl font-extrabold ${result.company_trust.trust_score >= 60 ? "text-[var(--success)]" : result.company_trust.trust_score >= 30 ? "text-[var(--warning)]" : "text-[var(--danger)]"}`}>{result.company_trust.trust_score}<span className="text-lg">/100</span></div>
+                </div>
+                <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4 text-center">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Trust Level</div>
+                  <div className="text-sm font-bold text-[var(--foreground)] mt-2 capitalize">{result.company_trust.trust_level}</div>
+                </div>
+                {result.company_trust.community_data && (
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4 text-center">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] mb-1">Community Reports</div>
+                    <div className="text-sm font-medium text-[var(--foreground)] mt-2 flex items-center justify-center gap-1.5">
+                      <Users className="h-4 w-4" />
+                      {result.company_trust.community_data.report_count} report{result.company_trust.community_data.report_count !== 1 ? "s" : ""}
+                      {result.company_trust.community_data.is_blacklisted && <span className="ml-1 rounded bg-[var(--danger)] px-1.5 py-0.5 text-[10px] font-bold text-white">BLACKLISTED</span>}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {result.company_trust.details?.domain?.reasons && result.company_trust.details.domain.reasons.length > 0 && (
+                <div className="space-y-1.5">
+                  {result.company_trust.details.domain.reasons.map((r, i) => (
+                    <div key={i} className="flex items-start gap-2 text-sm text-[var(--muted)]">
+                      <Info className="h-4 w-4 shrink-0 mt-0.5" /> {r}
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
           )}
 
