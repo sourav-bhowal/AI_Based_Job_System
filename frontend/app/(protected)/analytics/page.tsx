@@ -44,15 +44,15 @@ export default async function AnalyticsPage() {
     : [];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-6 py-8">
       {/* Header */}
-      <div className="mb-8">
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[var(--accent-subtle)] px-3 py-1 text-xs font-medium text-[var(--accent)]">
+      <div className="mb-8 text-center lg:text-left">
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[var(--accent-subtle)] px-3 py-1 text-xs font-medium text-[var(--accent)] border border-[var(--accent)]/10">
           <Activity className="h-4 w-4" />
           Platform Insights
         </div>
-        <h1 className="mb-2 text-3xl font-bold tracking-tight text-[var(--foreground)]">Analytics Dashboard</h1>
-        <p className="text-[var(--muted)]">Platform usage statistics, threat trends, and ML model performance metrics.</p>
+        <h1 className="mb-2 text-2xl lg:text-3xl font-bold tracking-tight text-[var(--foreground)]">Analytics Dashboard</h1>
+        <p className="text-[var(--muted)] text-sm lg:text-base">Platform usage statistics, threat trends, and ML model performance metrics.</p>
       </div>
 
       {/* Stats Grid */}
@@ -77,171 +77,181 @@ export default async function AnalyticsPage() {
         </div>
       )}
 
-      {/* Risk Distribution */}
-      {overview && (
-        <Card className="mb-8">
-          <h2 className="mb-5 text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
-             <AlertTriangle className="h-5 w-5 text-[var(--warning)]" /> Risk Assessment Distribution
-          </h2>
-          <div className="flex flex-col sm:flex-row gap-4">
-            {[
-              { label: "Safe", count: overview.risk_distribution.safe, color: "var(--success)" },
-              { label: "Medium Risk", count: overview.risk_distribution.medium_risk, color: "var(--warning)" },
-              { label: "High Risk", count: overview.risk_distribution.high_risk, color: "var(--danger)" },
-            ].map((r) => {
-              const total = overview.risk_distribution.safe + overview.risk_distribution.medium_risk + overview.risk_distribution.high_risk;
-              const pct = total > 0 ? (r.count / total * 100) : 0;
-              return (
-                <div key={r.label} className="flex-1">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-[var(--foreground)]">{r.label}</span>
-                    <span className="flex items-center gap-1.5 text-xs font-bold text-[var(--muted)]">
-                      {pct.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="h-3.5 rounded-full bg-[var(--card-border)]/50 overflow-hidden">
-                    <div className="h-3.5 rounded-full transition-all duration-1000 ease-out" style={{ width: `${Math.max(pct, 2)}%`, backgroundColor: r.color }} />
-                  </div>
-                  <div className="mt-2 text-xs font-medium text-[var(--muted)]">{r.count.toLocaleString()} scans</div>
+      {/* Layout Grid Composition */}
+      <div className="space-y-6">
+        
+        {/* Middle Row: Trends (8) + Risk Distribution (4) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-8">
+            {trends.length > 0 && (
+              <Card className="p-0 overflow-hidden h-full">
+                <div className="p-5 border-b border-[var(--card-border)] bg-[var(--background)]">
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-[var(--muted)] flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-[var(--accent)]" /> 30-Day Platform Activity
+                  </h2>
                 </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
-      {/* Trends */}
-      {trends.length > 0 && (
-        <Card className="mb-8 p-0 overflow-hidden">
-          <div className="p-5 border-b border-[var(--card-border)] bg-[var(--background)]">
-            <h2 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-[var(--accent)]" /> 30-Day Platform Activity
-            </h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[var(--card)]/50">
-                  <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Date</th>
-                  <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Scans Completed</th>
-                  <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Daily Avg Risk</th>
-                </tr>
-              </thead>
-              <tbody>
-                {trends.slice(0, 14).map((t, idx) => (
-                  <tr key={t.date} className={`border-t border-[var(--card-border)]/50 transition-colors hover:bg-[var(--accent-subtle)]/30 ${idx % 2 === 0 ? "bg-[var(--card)]" : "bg-[var(--background)]"}`}>
-                    <td className="px-6 py-4 font-medium text-[var(--foreground)]">{t.date}</td>
-                    <td className="px-6 py-4 text-right font-semibold">{t.count.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right">
-                      <span className={`inline-flex items-center justify-center rounded-lg px-2.5 py-1 text-xs font-bold shadow-sm border ${
-                        t.avg_risk_score > 70 ? "bg-[var(--danger-subtle)] text-[var(--danger)] border-[var(--danger)]/20" : 
-                        t.avg_risk_score > 40 ? "bg-[var(--warning-subtle)] text-[var(--warning)] border-[var(--warning)]/20" : 
-                        "bg-[var(--success-subtle)] text-[var(--success)] border-[var(--success)]/20"
-                      }`}>
-                        {t.avg_risk_score.toFixed(1)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Top Reported */}
-        {topReported.length > 0 && (
-          <Card padding="md">
-            <h2 className="mb-5 text-lg font-bold text-[var(--foreground)] flex items-center gap-2 border-b border-[var(--card-border)] pb-3">
-              <Building2 className="h-5 w-5 text-[var(--danger)]" /> Top Investigated
-            </h2>
-            <div className="space-y-3">
-              {topReported.map((c, i) => (
-                <div key={i} className="flex items-center justify-between rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-3.5 transition-all hover:border-[var(--danger)]/30 hover:shadow-sm">
-                  <div className="flex items-center gap-4">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--card-border)]/50 text-sm font-bold text-[var(--muted)]">{i + 1}</span>
-                    <span className="font-bold text-[var(--foreground)] text-base">{c.company_name}</span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-lg font-extrabold text-[var(--danger)]">{c.report_count}</span>
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--muted)]">Reports</span>
-                  </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-[var(--card)]/50">
+                        <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Date</th>
+                        <th className="px-5 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Scans Completed</th>
+                        <th className="px-5 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Daily Avg Risk</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {trends.slice(0, 8).map((t, idx) => (
+                        <tr key={t.date} className={`border-t border-[var(--card-border)]/50 transition-colors hover:bg-[var(--accent-subtle)]/30 ${idx % 2 === 0 ? "bg-[var(--card)]" : "bg-[var(--background)]"}`}>
+                          <td className="px-5 py-3 font-semibold text-[var(--foreground)]">{t.date}</td>
+                          <td className="px-5 py-3 text-right font-bold text-[var(--muted)]">{t.count.toLocaleString()}</td>
+                          <td className="px-5 py-3 text-right">
+                            <span className={`inline-flex items-center justify-center rounded-md px-2 py-0.5 text-[10px] font-extrabold shadow-sm border ${
+                              t.avg_risk_score > 70 ? "bg-[var(--danger-subtle)] text-[var(--danger)] border-[var(--danger)]/20" : 
+                              t.avg_risk_score > 40 ? "bg-[var(--warning-subtle)] text-[var(--warning)] border-[var(--warning)]/20" : 
+                              "bg-[var(--success-subtle)] text-[var(--success)] border-[var(--success)]/20"
+                            }`}>
+                              {t.avg_risk_score.toFixed(1)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
-            </div>
-          </Card>
-        )}
+              </Card>
+            )}
+          </div>
 
-        {/* Categories */}
+          <div className="lg:col-span-4">
+            {overview && (
+              <Card className="h-full">
+                <h2 className="mb-6 text-sm font-bold uppercase tracking-widest text-[var(--muted)] flex items-center gap-2">
+                   <AlertTriangle className="h-4 w-4 text-[var(--warning)]" /> Risk Distribution
+                </h2>
+                <div className="flex flex-col gap-5">
+                  {[
+                    { label: "Safe", count: overview.risk_distribution.safe, color: "var(--success)" },
+                    { label: "Medium Risk", count: overview.risk_distribution.medium_risk, color: "var(--warning)" },
+                    { label: "High Risk", count: overview.risk_distribution.high_risk, color: "var(--danger)" },
+                  ].map((r) => {
+                    const total = overview.risk_distribution.safe + overview.risk_distribution.medium_risk + overview.risk_distribution.high_risk;
+                    const pct = total > 0 ? (r.count / total * 100) : 0;
+                    return (
+                      <div key={r.label} className="flex-1">
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-xs font-bold text-[var(--foreground)]">{r.label}</span>
+                          <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-[var(--muted)]">
+                            {pct.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="h-2 rounded-full bg-[var(--card-border)]/50 overflow-hidden">
+                          <div className="h-2 rounded-full transition-all duration-1000 ease-out" style={{ width: `${Math.max(pct, 2)}%`, backgroundColor: r.color }} />
+                        </div>
+                        <div className="mt-1.5 text-[10px] font-semibold text-[var(--muted)] tracking-wide">{r.count.toLocaleString()} scans</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+          </div>
+        </div>
+
+        {/* Full Width Row: Report Categorization */}
         {categories.length > 0 && (
           <Card padding="md">
-            <h2 className="mb-5 text-lg font-bold text-[var(--foreground)] flex items-center gap-2 border-b border-[var(--card-border)] pb-3">
-              <Server className="h-5 w-5 text-[var(--accent)]" /> Report Categorization
+            <h2 className="mb-5 text-sm font-bold uppercase tracking-widest text-[var(--muted)] flex items-center gap-2 border-b border-[var(--card-border)] pb-3">
+              <Server className="h-4 w-4 text-[var(--accent)]" /> Report Categorization
             </h2>
-            <div className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {categories.map((c, i) => (
-                <div key={i} className="flex items-center justify-between rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-3.5">
-                  <span className="font-semibold text-[var(--foreground)] capitalize flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-[var(--accent)]" />
+                <div key={i} className="flex flex-col items-center justify-center rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-4 shadow-sm text-center">
+                  <span className="rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent)]/10 px-3 py-1 text-lg font-extrabold text-[var(--accent)] mb-2">{c.count}</span>
+                  <span className="font-semibold text-[var(--muted)] text-xs capitalize leading-tight">
                     {c.category.replace(/_/g, " ")}
                   </span>
-                  <span className="rounded-lg bg-[var(--accent-subtle)] border border-[var(--accent)]/10 px-3 py-1 text-sm font-bold text-[var(--accent)]">{c.count}</span>
                 </div>
               ))}
             </div>
           </Card>
         )}
-      </div>
 
-      {/* Model Comparison */}
-      {models?.models && (
-        <Card className="mt-8 p-0 overflow-hidden">
-          <div className="p-5 border-b border-[var(--card-border)] bg-[var(--background)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h2 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
-              <BrainCircuit className="h-5 w-5 text-[var(--accent)]" /> Machine Learning Pipeline
-            </h2>
-            <div className="text-sm font-medium text-[var(--muted)] bg-[var(--success-subtle)] px-3 py-1.5 rounded-lg border border-[var(--success)]/20">
-              Active Primary: <span className="font-bold text-[var(--success)]">{models.best_model || models.models.reduce((prev, current) => (prev.f1_score > current.f1_score) ? prev : current).model_name}</span>
-            </div>
+        {/* Bottom Row: Models (8) + Top Reported (4) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-8">
+            {models?.models && (
+              <Card className="p-0 overflow-hidden h-full">
+                <div className="p-5 border-b border-[var(--card-border)] bg-[var(--background)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <h2 className="text-sm font-bold uppercase tracking-widest text-[var(--muted)] flex items-center gap-2">
+                    <BrainCircuit className="h-4 w-4 text-[var(--accent)]" /> Machine Learning Pipeline
+                  </h2>
+                  <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--muted)] bg-[var(--success-subtle)] px-2 py-1 rounded-md border border-[var(--success)]/20">
+                    Active: <span className="font-extrabold text-[var(--success)]">{models.best_model || models.models.reduce((prev, current) => (prev.f1_score > current.f1_score) ? prev : current).model_name}</span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-[var(--card)]/50">
+                        <th className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Model Artifact</th>
+                        <th className="px-5 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Accuracy</th>
+                        <th className="px-5 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">Precision</th>
+                        <th className="px-5 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">F1 Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {models.models.map((m, idx) => {
+                        const bestModelName = models.best_model || models.models.reduce((prev, current) => (prev.f1_score > current.f1_score) ? prev : current).model_name;
+                        const isBest = m.model_name === bestModelName;
+                        return (
+                          <tr key={m.model_name} className={`border-t border-[var(--card-border)]/50 transition-colors ${
+                            isBest ? "bg-[var(--success-subtle)]/30 backdrop-blur-sm" : idx % 2 === 0 ? "bg-[var(--card)]" : "bg-[var(--background)]"
+                          }`}>
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-semibold ${isBest ? "text-[var(--success)]" : "text-[var(--foreground)]"}`}>{m.model_name}</span>
+                                {isBest && <span className="rounded bg-[var(--success)] px-1.5 py-0.5 text-[8px] font-bold uppercase text-white tracking-widest leading-none">Best</span>}
+                              </div>
+                            </td>
+                            <td className="px-5 py-3 text-right font-medium text-[var(--muted)]">{m.accuracy.toFixed(2)}%</td>
+                            <td className="px-5 py-3 text-right font-medium text-[var(--muted)]">{m.precision.toFixed(2)}%</td>
+                            <td className="px-5 py-3 text-right font-bold text-[var(--foreground)]">{m.f1_score.toFixed(2)}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[var(--card)]/50">
-                  <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Model Artifact</th>
-                  <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Accuracy</th>
-                  <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Precision</th>
-                  <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Recall</th>
-                  <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-[var(--muted)]">F1 Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {models.models.map((m, idx) => {
-                  const bestModelName = models.best_model || models.models.reduce((prev, current) => (prev.f1_score > current.f1_score) ? prev : current).model_name;
-                  const isBest = m.model_name === bestModelName;
-                  return (
-                    <tr key={m.model_name} className={`border-t border-[var(--card-border)]/50 transition-colors ${
-                      isBest ? "bg-[var(--success-subtle)]/30 backdrop-blur-sm" : idx % 2 === 0 ? "bg-[var(--card)]" : "bg-[var(--background)]"
-                    }`}>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`font-bold ${isBest ? "text-[var(--success)]" : "text-[var(--foreground)]"}`}>{m.model_name}</span>
-                          {isBest && <span className="rounded bg-[var(--success)] px-1.5 py-0.5 text-[10px] font-bold uppercase text-white tracking-widest leading-none">Best</span>}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right font-medium">{m.accuracy.toFixed(2)}%</td>
-                      <td className="px-6 py-4 text-right font-medium">{m.precision.toFixed(2)}%</td>
-                      <td className="px-6 py-4 text-right font-medium">{m.recall.toFixed(2)}%</td>
-                      <td className="px-6 py-4 text-right font-bold text-[var(--foreground)]">{m.f1_score.toFixed(2)}%</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+
+          <div className="lg:col-span-4">
+            {topReported.length > 0 && (
+              <Card padding="md" className="h-full">
+                <h2 className="mb-5 text-sm font-bold uppercase tracking-widest text-[var(--muted)] flex items-center gap-2 border-b border-[var(--card-border)] pb-3">
+                  <Building2 className="h-4 w-4 text-[var(--danger)]" /> Top Investigated
+                </h2>
+                <div className="space-y-3">
+                  {topReported.slice(0, 5).map((c, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-xl border border-[var(--card-border)] bg-[var(--background)] p-3 transition-all hover:border-[var(--danger)]/30 hover:shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--card-border)]/50 text-[10px] font-bold text-[var(--muted)]">{i + 1}</span>
+                        <span className="font-bold text-[var(--foreground)] text-sm truncate max-w-[120px]">{c.company_name}</span>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className="text-base font-extrabold text-[var(--danger)]">{c.report_count}</span>
+                        <span className="text-[8px] uppercase tracking-wider font-bold text-[var(--muted)]">Reports</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
           </div>
-        </Card>
-      )}
+        </div>
+
+      </div>
 
       {/* No Data Fallback */}
       {!overview && trends.length === 0 && topReported.length === 0 && !models && categories.length === 0 && (

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Search, FileText, Building2, ShieldAlert, BarChart3, Brain, Target, Activity, Unlock } from "lucide-react";
+import { cookies } from "next/headers";
 
 const features = [
   {
@@ -46,7 +47,10 @@ const stats = [
   { label: "Open Source", value: "100%", icon: Unlock },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const cookieStore = await cookies();
+  const isAuthenticated = !!cookieStore.get("auth_token")?.value;
+
   return (
     <div className="relative">
       {/* Hero Section */}
@@ -88,12 +92,21 @@ export default function HomePage() {
                 Scan a Job Posting
                 <Search className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
-              <Link
-                href="/register"
-                className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] px-6 py-3.5 text-sm font-semibold text-[var(--foreground)] shadow-[var(--shadow-sm)] transition-all duration-200 hover:shadow-[var(--shadow-md)] hover:-translate-y-0.5 hover:bg-[var(--accent-subtle)]/50"
-              >
-                Create Free Account
-              </Link>
+              {!isAuthenticated ? (
+                <Link
+                  href="/register"
+                  className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] px-6 py-3.5 text-sm font-semibold text-[var(--foreground)] shadow-[var(--shadow-sm)] transition-all duration-200 hover:shadow-[var(--shadow-md)] hover:-translate-y-0.5 hover:bg-[var(--accent-subtle)]/50"
+                >
+                  Create Free Account
+                </Link>
+              ) : (
+                <Link
+                  href="/analytics"
+                  className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] px-6 py-3.5 text-sm font-semibold text-[var(--foreground)] shadow-[var(--shadow-sm)] transition-all duration-200 hover:shadow-[var(--shadow-md)] hover:-translate-y-0.5 hover:bg-[var(--accent-subtle)]/50"
+                >
+                  Go to Dashboard
+                </Link>
+              )}
             </div>
           </div>
 

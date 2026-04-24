@@ -213,6 +213,35 @@ def extract_features_from_text(job_text: str):
     return position, years_exp, education, industry, location
 
 
+def extract_structured_features(job_text: str):
+    """
+    Extract specific structural features for post-prediction anomaly adjustments
+    without polluting the ML base model inputs.
+    """
+    text_lower = job_text.lower()
+    
+    is_fresher = False
+    if any(w in text_lower for w in ["junior", "entry", "fresher", "0-1 year", "0-2 year", "0 years", "0 to 1", "0 to 2", "0- 1"]):
+        is_fresher = True
+        
+    job_type = "full-time"
+    if "intern" in text_lower or "internship" in text_lower:
+        job_type = "internship"
+        is_fresher = True  # Internships are mostly entry level
+        
+    company_tier = "unknown"
+    if any(w in text_lower for w in ["tcs", "infosys", "wipro", "cognizant", "accenture", "mass recruiter", "tech mahindra", "capgemini", "hcl", "ibm"]):
+        company_tier = "mass_recruiter"
+    elif "startup" in text_lower:
+        company_tier = "startup"
+        
+    return {
+        "is_fresher": is_fresher,
+        "job_type": job_type,
+        "company_tier": company_tier
+    }
+
+
 def predict_salary_anomaly(salary_str: str, job_text: str) -> dict:
     """
     Predict whether a salary is anomalous purely using the trained ML model.
@@ -232,19 +261,66 @@ def predict_salary_anomaly(salary_str: str, job_text: str) -> dict:
         "ml_prediction": None,
     }
 
+    # Extract structured features for post-processing ONLY
+    structured_features = extract_structured_features(job_text)
+
     # RF ML Prediction
     rf_predicted_inr = _predict_with_rf(position, years_exp, education, industry, location)
     
+    avg_salary_temp = (min_sal + max_sal) / 2 if min_sal is not None else None
+    
     if rf_predicted_inr:
+        print(f"[DEBUG Salary ML] Base RF Prediction: ₹{rf_predicted_inr:,.0f}")
+        print(f"[DEBUG Salary ML] Structured Features: {structured_features}")
+
+        adjusted_inr = rf_predicted_inr
+
+        is_missing = avg_salary_temp is None
+        avg_salary_inr = avg_salary_temp
+        if avg_salary_temp and currency == "USD":
+            avg_salary_inr = avg_salary_temp * 83.0
+            
+        is_unrealistic = False
+        if avg_salary_inr:
+            if avg_salary_inr > 1200000 or avg_salary_inr > rf_predicted_inr * 2.5:
+                is_unrealistic = True
+
+        # Soft Corrections
+        if structured_features["job_type"] == "internship":
+            if is_missing or is_unrealistic:
+                adjusted_inr *= 0.7
+                print(f"[DEBUG Salary ML] Applied Internship Correction (x0.7)")
+            else:
+                pass
+        elif structured_features["is_fresher"]:
+            if is_missing or is_unrealistic:
+                adjusted_inr *= 0.85
+                print(f"[DEBUG Salary ML] Applied Fresher Correction (x0.85)")
+            else:
+                pass
+
+        # Company Tier as Weak Signal
+        if structured_features["company_tier"] == "mass_recruiter":
+            adjusted_inr = min(adjusted_inr, 500000.0)
+            print(f"[DEBUG Salary ML] Applied Mass Recruiter Cap (Max 5 LPA)")
+
+        # Salary Clamping for entry-level roles
+        if structured_features["is_fresher"]:
+            adjusted_inr = max(adjusted_inr, 250000.0)
+            adjusted_inr = min(adjusted_inr, 1200000.0)
+            print(f"[DEBUG Salary ML] Applied Entry-Level Clamping (2.5 LPA - 12 LPA)")
+
+        print(f"[DEBUG Salary ML] Final Adjusted Prediction: ₹{adjusted_inr:,.0f}")
+
         # Convert prediction to USD if requested salary is in USD
-        # Assume approx 1 USD = 83 INR
-        prediction_val = rf_predicted_inr / 83.0 if currency == "USD" else rf_predicted_inr
+        prediction_val = adjusted_inr / 83.0 if currency == "USD" else adjusted_inr
         
         result["ml_prediction"] = {
             "predicted_salary": round(prediction_val, 0),
-            "model": "Random Forest Regressor (ML Pipeline)",
+            "model": "Random Forest Regressor + Post-Processing",
             "inferred_experience_years": years_exp,
             "inferred_education": education,
+            "base_rf_prediction": round(rf_predicted_inr, 0),
         }
 
     if min_sal is None:
@@ -258,26 +334,49 @@ def predict_salary_anomaly(salary_str: str, job_text: str) -> dict:
 
     # ML-based deviation check (Primary mechanism)
     if rf_predicted_inr and avg_salary > 0:
-        prediction_val = rf_predicted_inr / 83.0 if currency == "USD" else rf_predicted_inr
+        prediction_val = adjusted_inr / 83.0 if currency == "USD" else adjusted_inr
         deviation = abs(avg_salary - prediction_val) / prediction_val
+        
+        is_reasonable_range = (currency == "INR" and 200000 <= avg_salary <= 1200000)
         
         # 1. Way above market rate (scam indicator)
         if avg_salary > prediction_val * 2.5:
-            anomaly_score += 0.6
-            result["analysis"].append(f"Salary is more than 2.5x the ML prediction ({currency} {prediction_val:,.0f}) — strong scam indicator")
+            if is_reasonable_range and structured_features["is_fresher"]:
+                anomaly_score += 0.2
+                result["analysis"].append("Salary is above prediction but within reasonable entry-level bounds (2-12 LPA)")
+            else:
+                anomaly_score += 0.6
+                result["analysis"].append(f"Salary is more than 2.5x the expected adjusted rate ({currency} {prediction_val:,.0f}) — strong scam indicator")
         elif avg_salary > prediction_val * 1.8:
-            anomaly_score += 0.4
-            result["analysis"].append("Salary is significantly above expected market rate — highly suspicious")
+            if is_reasonable_range and structured_features["is_fresher"]:
+                anomaly_score += 0.1
+                result["analysis"].append("Salary is slightly above prediction, but plausible for entry-level")
+            else:
+                anomaly_score += 0.4
+                result["analysis"].append("Salary is significantly above expected market rate — highly suspicious")
             
         # 2. Too low (exploitative)
         elif avg_salary < prediction_val * 0.4:
-            anomaly_score += 0.3
-            result["analysis"].append("Salary is unusually low compared to ML prediction — may be exploitative")
+            if structured_features["is_fresher"] and avg_salary > 100000 and currency == "INR":
+                anomaly_score += 0.1
+                result["analysis"].append("Salary is lower than prediction, but within plausible bounds for entry level. Model uncertainty flagged.")
+            else:
+                anomaly_score += 0.3
+                result["analysis"].append("Salary is unusually low compared to expected prediction — may be exploitative")
             
         # General deviation notice
-        if deviation > 0.5 and anomaly_score < 0.3:
-            anomaly_score += 0.2
-            result["analysis"].append(f"Salary deviates {deviation:.0%} from ML-predicted value — unusual")
+        threshold = 0.5
+        if structured_features["job_type"] == "internship":
+            threshold = 0.65
+        elif structured_features["is_fresher"]:
+            threshold = 0.6
+            
+        if deviation > threshold and anomaly_score < 0.3:
+            if structured_features["is_fresher"] and 100000 <= avg_salary <= 400000 and currency == "INR":
+                result["analysis"].append("Model deviation ignored due to standard entry-level salary bounds.")
+            else:
+                anomaly_score += 0.2
+                result["analysis"].append(f"Salary deviates {deviation:.0%} from expected value — unusual")
             
         result["ml_prediction"]["deviation_percent"] = round(deviation * 100, 1)
 
@@ -288,7 +387,7 @@ def predict_salary_anomaly(salary_str: str, job_text: str) -> dict:
             anomaly_score += 0.2
             result["analysis"].append("Very wide salary range spread — vague postings are a red flag")
 
-    if min_sal and min_sal % 50000 == 0 and max_sal and max_sal % 50000 == 0 and avg_salary > 100000:
+    if avg_salary >= 2000000 and avg_salary % 1000000 == 0:
         anomaly_score += 0.05
         result["analysis"].append("Suspiciously round salary numbers")
 

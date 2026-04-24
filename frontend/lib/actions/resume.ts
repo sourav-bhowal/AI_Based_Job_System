@@ -1,7 +1,8 @@
 "use server";
 
-import { uploadResumeSSR, matchResumeSSR, generateMatchPdfSSR } from "@/lib/api-server";
+import { uploadResumeSSR, matchResumeSSR, generateMatchPdfSSR, getResumeAnalysisSSR, deleteResumeSSR } from "@/lib/api-server";
 import { ResumeUploadResult, MatchResult } from "@/lib/types";
+import { revalidatePath } from "next/cache";
 
 export type UploadActionState = 
   | { success: false; error: string; data?: null }
@@ -20,9 +21,36 @@ export async function uploadResumeAction(
 
   try {
     const data = await uploadResumeSSR(file);
+    revalidatePath("/resume");
     return { success: true, data };
   } catch (error: any) {
     return { success: false, error: error.message || "Failed to upload resume" };
+  }
+}
+
+export async function getResumeAnalysisAction(resumeId: number): Promise<UploadActionState> {
+  if (!resumeId) {
+    return { success: false, error: "Please select a valid resume." };
+  }
+
+  try {
+    const data = await getResumeAnalysisSSR(resumeId);
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to retrieve resume analysis." };
+  }
+}
+
+export async function deleteResumeAction(resumeId: number): Promise<{ success: boolean; error?: string }> {
+  if (!resumeId) {
+    return { success: false, error: "Invalid resume." };
+  }
+  try {
+    await deleteResumeSSR(resumeId);
+    revalidatePath("/resume");
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || "Failed to delete resume." };
   }
 }
 

@@ -49,7 +49,7 @@ contribution_i = coefficient_i × tfidf_value_i
 
 When the saved model is a `CalibratedClassifierCV` wrapper (as with the current SVM), the explainer automatically unwraps it to access the inner estimator's `coef_` vector via `model.calibrated_classifiers_[0].estimator.coef_`.
 
-Features are ranked by absolute contribution magnitude and partitioned into positive contributors (scam indicators) and negative contributors (legitimacy indicators). The top-k features in each direction are surfaced to the user, providing token-level explainability.
+Features are ranked by absolute contribution magnitude and partitioned into positive contributors (scam indicators) and negative contributors (legitimacy indicators). The top-k features in each direction are surfaced to the user, providing token-level explainability. The clear advantage of the TF-IDF + Linear SVM architecture over complex non-linear models is this direct, mathematical mapping from text tokens to final scam probability, enabling complete transparency.
 
 Additionally, 8 regex-based pattern detectors identify known scam templates (upfront payment requests, guaranteed income claims, urgency language), and NER-derived signals detect structural anomalies (absence of ORG entities, missing location references).
 
@@ -98,15 +98,23 @@ X = [Position, YearsExperience, EducationLevel, Industry, Location]
 - **Categorical:** `OneHotEncoder` transforms `Position`, `EducationLevel`, `Industry`, and `Location` strings.
 - **Numerical:** `StandardScaler` normalizes `YearsExperience`.
 
-**Training data:** The pipeline is trained on `synthetic_salary_dataset.csv`. The `RandomForestRegressor` acts as the final estimator, outputting a continuous real-world salary prediction based on the learned underlying relationships.
+**Training data:** The pipeline is trained on `synthetic_salary_dataset.csv`. The `RandomForestRegressor` acts as the final estimator, outputting a continuous real-world salary base prediction.
 
-The model's prediction serves as the "expected salary" baseline. Anomaly scoring compares the parsed job salary against the ML pipeline prediction:
+### 4.1 Hybrid Rule-Based Post-Processing
+
+Relying purely on the ML model proved insufficient for entry-level roles due to dataset bias, causing unrealistic overpredictions. To stabilize predictions, the system uses a **Hybrid Approach** where conditional heuristics supplement the ML predictions:
+- **Structured Features:** We extract explicit signals like "fresher" or "internship" via keyword matching.
+- **Conditional Heuristic Multipliers:** If the extracted salary is missing or unrealistic, internships or freshers apply a `0.7x` or `0.85x` multiplier to the base prediction. These are applied conditionally to prevent penalizing realistic postings.
+- **Mass Recruiter Constraints:** Detected mass recruiters enforce a hard cap of ₹5 LPA.
+- **Clamping:** Final values are clamped between realistic entry-level bounds (e.g., ₹2.5 LPA minimum, ₹12 LPA maximum).
+
+The finalized, post-processed prediction serves as the "expected salary" baseline. Anomaly scoring compares the parsed job salary against this baseline:
 
 - **Posted salary > 2.5× prediction** → +0.60 anomaly score (strong scam indicator)
 - **Posted salary > 1.8× prediction** → +0.40 (significantly above market)
 - **Posted salary < 0.4× prediction** → +0.30 (unusually low, potentially exploitative)
-- **Deviation > 50%** → +0.20 (unusual deviation)
-- Combined with secondary heuristic checks (wide range spread: +0.20, suspiciously round numbers: +0.05). Score capped at 1.0.
+- **Deviation Thresholds:** A ~30-50% variance is considered normal market fluctuation. Deviations beyond a threshold (~0.5 base, relaxed to ~0.6-0.65 for freshers/internships) trigger a +0.20 anomaly score.
+- Combined with secondary heuristic checks (wide range spread: +0.20, extremely large round numbers: +0.05). Score capped at 1.0.
 
 ---
 
@@ -141,7 +149,7 @@ NER outputs are integrated into 4 downstream modules: scraping (entity enrichmen
 
 ## 6. Resume-Job Matching — Cosine Similarity + Feature Matching
 
-Document similarity is computed using **cosine similarity** on TF-IDF vectors (3,000 features, separate vectorizer from the classifier). This captures semantic alignment between resume and job description in the vector space.
+Document similarity is computed using **cosine similarity** on TF-IDF vectors (3,000 features, separate vectorizer from the classifier). Cosine similarity measures the angle between two sparse vectors in high-dimensional space, providing an efficient and mathematically robust way to gauge exact keyword and skill overlap between the resume and the job posting without being biased by document length.
 
 A secondary **set-intersection metric** computes exact skill overlap ratio using a curated taxonomy of 200+ skills across 7 categories, matched via regex word-boundary patterns (`\b{skill}\b`).
 
@@ -173,6 +181,21 @@ risk_score = 0.50 × P(scam|text) + 0.30 × salary_anomaly + 0.20 × domain_scor
 ```
 
 This multi-signal ensemble reduces variance and provides robustness against adversarial evasion of any single detection modality.
+
+---
+
+## 8. System Limitations & Future Work
+
+As a prototype-scale implementation, this system operates under several known constraints:
+
+### 8.1 Web Scraping Protections
+Major job portals (e.g., LinkedIn, Naukri) actively implement anti-automation protections (CAPTCHAs, Access Denied walls). The system detects these blocks and gracefully falls back to a manual text-paste interface rather than attempting complex bypass mechanisms.
+
+### 8.2 Dataset Bias & Model Drift
+The core fraud detection models are trained on a static dataset (`fake_job_postings.csv`). While community reports build an active blacklist, they do not currently form an automated feedback loop to fine-tune the Random Forest/SVM models in real-time.
+
+### 8.3 Heuristic Dependencies
+To compensate for limited ML training data, the salary prediction and risk scoring pipelines rely on hardcoded heuristic adjustments (e.g., the 0.5x multiplier for internships, static currency conversion rates). While effective for the prototype, these bounds require manual maintenance to reflect evolving market conditions.
 
 ---
 

@@ -134,7 +134,7 @@ export async function checkCompanySSR(
 // ========== Resume ==========
 
 export async function listResumesSSR(): Promise<{ resumes: ResumeListItem[] }> {
-  return serverFetch("/api/resume/list");
+  return serverFetch("/api/resume/list", { cache: "no-store" });
 }
 
 export async function uploadResumeSSR(file: File): Promise<ResumeUploadResult> {
@@ -143,6 +143,16 @@ export async function uploadResumeSSR(file: File): Promise<ResumeUploadResult> {
   return serverFetch<ResumeUploadResult>("/api/resume/upload", {
     method: "POST",
     body: formData as any,
+  });
+}
+
+export async function getResumeAnalysisSSR(resume_id: number): Promise<ResumeUploadResult> {
+  return serverFetch<ResumeUploadResult>(`/api/resume/${resume_id}`);
+}
+
+export async function deleteResumeSSR(resume_id: number): Promise<{ success: boolean; message: string }> {
+  return serverFetch<{ success: boolean; message: string }>(`/api/resume/${resume_id}`, {
+    method: "DELETE",
   });
 }
 

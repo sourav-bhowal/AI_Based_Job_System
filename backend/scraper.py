@@ -43,6 +43,7 @@ def _fetch_url(url: str):
                 },
             )
             page = context.new_page()
+            page.set_extra_http_headers({"User-Agent": REQUEST_HEADERS["User-Agent"]})
             page.goto(url, wait_until="networkidle", timeout=35000)
             try:
                 page.wait_for_load_state("networkidle", timeout=10000)
@@ -134,6 +135,28 @@ def scrape_job(url: str):
 
         # Parse the HTML content using BeautifulSoup
         soup = BeautifulSoup(html, "html.parser")
+
+        page_title = (soup.title.string if soup.title and soup.title.string else "").lower()
+        html_lower = html.lower()
+        html_len = len(html)
+        text_preview = soup.get_text(strip=True)[:500]
+        low_content = len(text_preview) < 200
+        
+        print(f"[SCRAPER DEBUG] Title: {page_title}")
+        print(f"[SCRAPER DEBUG] HTML length: {html_len}")
+        print(f"[SCRAPER DEBUG] Text preview length: {len(text_preview)}")
+        
+        suspicious_title = page_title.strip() in ["access denied", "just a moment"]
+        has_block_keywords = any(term in html_lower for term in ["cf-browser-verification", "captcha", "cloudflare", "bot detection"])
+        
+        if suspicious_title or (has_block_keywords and html_len < 2000 and low_content):
+            return {
+                "success": False,
+                "error": "SCRAPE_BLOCKED",
+                "message": "Target website blocked automated scraping",
+                "url": url,
+                "domain": urlparse(url).netloc
+            }
 
         # Extract the text content from the page
         text = extract_job_description(soup)

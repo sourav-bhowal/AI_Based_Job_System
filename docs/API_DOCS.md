@@ -189,6 +189,7 @@ Scan a job posting URL for scam indicators. Scrapes the page, runs ML prediction
 | ------ | ------------------------------------------------ |
 | `422`  | Validation error (missing `url`)                 |
 | `500`  | Scraping failed (URL unreachable, timeout, etc.) |
+| `200`  | `{"error": "SCRAPE_BLOCKED", "message": "Target site restricts automated access", "fallback": "Use manual text input"}` |
 
 ---
 

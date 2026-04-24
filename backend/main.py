@@ -17,7 +17,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Query, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from typing import Optional
@@ -63,6 +63,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+from fastapi.staticfiles import StaticFiles
+uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+os.makedirs(uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 
 # ========== Pydantic Models ==========
@@ -128,8 +133,63 @@ def _rebuild_resume_data(resume_row: dict) -> dict:
         "experience_years": int(resume_row["experience"]) if resume_row["experience"] else 0,
         "contact": json.loads(resume_row["contact"]) if resume_row.get("contact") else {},
         "total_skills_found": sum(len(v) for v in skills.values()),
-        "word_count": len((resume_row["extracted_text"] or "").split()),
+        "word_count": resume_row.get("word_count") or len((resume_row["extracted_text"] or "").split()),
     }
+
+def _compute_resume_quality(resume_data: dict) -> tuple[int, list]:
+    quality_score = 0
+    quality_feedback = []
+
+    # Skills breadth (max 30 pts)
+    skill_pts = min(resume_data["total_skills_found"] * 2, 30)
+    quality_score += skill_pts
+    if resume_data["total_skills_found"] < 5:
+        quality_feedback.append({"type": "warning", "message": "Very few skills detected — consider adding more relevant technical skills"})
+    elif resume_data["total_skills_found"] >= 15:
+        quality_feedback.append({"type": "good", "message": f"Strong skill diversity with {resume_data['total_skills_found']} skills detected"})
+
+    # Education (max 15 pts)
+    if resume_data.get("education"):
+        quality_score += 15
+        quality_feedback.append({"type": "good", "message": f"{len(resume_data['education'])} education qualification(s) found"})
+    else:
+        quality_feedback.append({"type": "warning", "message": "No education details detected — ensure they are clearly listed"})
+
+    # Experience (max 15 pts)
+    exp = resume_data.get("experience_years", 0)
+    if exp > 0:
+        quality_score += min(exp * 3, 15)
+        quality_feedback.append({"type": "good", "message": f"{exp} year(s) of experience detected"})
+    else:
+        quality_feedback.append({"type": "warning", "message": "No experience years detected — add explicit mentions like '2+ years of experience'"})
+
+    # Contact completeness (max 20 pts)
+    contact = resume_data.get("contact", {})
+    contact_pts = 0
+    if contact.get("email"): contact_pts += 5
+    if contact.get("phone"): contact_pts += 5
+    if contact.get("linkedin"): contact_pts += 5
+    if contact.get("github"): contact_pts += 5
+    quality_score += contact_pts
+    if contact_pts < 10:
+        quality_feedback.append({"type": "warning", "message": "Missing contact details — add email, phone, LinkedIn, or GitHub"})
+    else:
+        quality_feedback.append({"type": "good", "message": "Good contact information coverage"})
+
+    # Word count (max 20 pts)
+    wc = resume_data.get("word_count", 0)
+    if 200 <= wc <= 800:
+        quality_score += 20
+        quality_feedback.append({"type": "good", "message": "Resume length is ideal (200-800 words)"})
+    elif wc < 200:
+        quality_score += 5
+        quality_feedback.append({"type": "warning", "message": "Resume is too short — aim for at least 200 words"})
+    else:
+        quality_score += 10
+        quality_feedback.append({"type": "warning", "message": "Resume is quite long — consider trimming to 1-2 pages"})
+
+    quality_score = min(quality_score, 100)
+    return quality_score, quality_feedback
 
 
 # ========== Auth Routes ==========
@@ -291,97 +351,130 @@ async def upload_resume(file: UploadFile = File(...), user=Depends(get_current_u
     if ext not in ["pdf", "docx", "doc", "txt"]:
         raise HTTPException(400, "Unsupported file type. Upload PDF, DOCX, or TXT.")
 
+    # Check size before reading into memory (if size is known)
+    if file.size and file.size > 5 * 1024 * 1024:
+        raise HTTPException(400, "File too large. Max 5MB.")
+
     # Read file
     contents = await file.read()
-    if len(contents) > 5 * 1024 * 1024:  # 5MB limit
+    if len(contents) > 5 * 1024 * 1024:  # Fallback 5MB limit check
         raise HTTPException(400, "File too large. Max 5MB.")
 
     # Parse resume
     resume_data = parse_resume(contents, file.filename)
+    word_count = len(resume_data["text"].split())
+    total_skills = sum(len(v) for v in resume_data["skills"].values())
+
+    # Compute quality score
+    quality_score, quality_feedback = _compute_resume_quality({
+        "total_skills_found": total_skills,
+        "education": resume_data["education"],
+        "experience_years": resume_data["experience_years"],
+        "contact": resume_data["contact"],
+        "word_count": word_count
+    })
 
     # Save to database
     conn = get_db()
     cursor = conn.execute(
-        """INSERT INTO resumes (user_id, filename, extracted_text, skills, experience, education, contact)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO resumes (user_id, filename, extracted_text, skills, experience, education, contact, quality_score, quality_feedback, word_count)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (user["id"], file.filename, resume_data["text"][:10000],
          json.dumps(resume_data["skills"]),
          str(resume_data["experience_years"]),
          json.dumps(resume_data["education"]),
-         json.dumps(resume_data["contact"]))
+         json.dumps(resume_data["contact"]),
+         quality_score,
+         json.dumps(quality_feedback),
+         word_count)
     )
     resume_id = cursor.lastrowid
     conn.commit()
     conn.close()
-
-    # Compute a standalone resume quality score
-    quality_score = 0
-    quality_feedback = []
-
-    # Skills breadth (max 30 pts)
-    skill_pts = min(resume_data["total_skills_found"] * 2, 30)
-    quality_score += skill_pts
-    if resume_data["total_skills_found"] < 5:
-        quality_feedback.append({"type": "warning", "message": "Very few skills detected — consider adding more relevant technical skills"})
-    elif resume_data["total_skills_found"] >= 15:
-        quality_feedback.append({"type": "good", "message": f"Strong skill diversity with {resume_data['total_skills_found']} skills detected"})
-
-    # Education (max 15 pts)
-    if resume_data["education"]:
-        quality_score += 15
-        quality_feedback.append({"type": "good", "message": f"{len(resume_data['education'])} education qualification(s) found"})
-    else:
-        quality_feedback.append({"type": "warning", "message": "No education details detected — ensure they are clearly listed"})
-
-    # Experience (max 15 pts)
-    exp = resume_data["experience_years"]
-    if exp > 0:
-        quality_score += min(exp * 3, 15)
-        quality_feedback.append({"type": "good", "message": f"{exp} year(s) of experience detected"})
-    else:
-        quality_feedback.append({"type": "warning", "message": "No experience years detected — add explicit mentions like '2+ years of experience'"})
-
-    # Contact completeness (max 20 pts)
-    contact = resume_data["contact"]
-    contact_pts = 0
-    if contact.get("email"): contact_pts += 5
-    if contact.get("phone"): contact_pts += 5
-    if contact.get("linkedin"): contact_pts += 5
-    if contact.get("github"): contact_pts += 5
-    quality_score += contact_pts
-    if contact_pts < 10:
-        quality_feedback.append({"type": "warning", "message": "Missing contact details — add email, phone, LinkedIn, or GitHub"})
-    else:
-        quality_feedback.append({"type": "good", "message": "Good contact information coverage"})
-
-    # Word count (max 20 pts)
-    wc = resume_data["word_count"]
-    if 200 <= wc <= 800:
-        quality_score += 20
-        quality_feedback.append({"type": "good", "message": "Resume length is ideal (200-800 words)"})
-    elif wc < 200:
-        quality_score += 5
-        quality_feedback.append({"type": "warning", "message": "Resume is too short — aim for at least 200 words"})
-    else:
-        quality_score += 10
-        quality_feedback.append({"type": "warning", "message": "Resume is quite long — consider trimming to 1-2 pages"})
-
-    quality_score = min(quality_score, 100)
+    
+    print(f"[DEBUG] Resume inserted: {file.filename} for user_id={user['id']} (new id: {resume_id})")
 
     return {
         "resume_id": resume_id,
         "filename": file.filename,
+        "skills": resume_data["skills"],
+        "total_skills_found": total_skills,
+        "education": resume_data["education"],
+        "experience_years": resume_data["experience_years"],
+        "contact": resume_data["contact"],
+        "word_count": word_count,
+        "ner_entities": resume_data.get("ner_entities"),
+        "quality_score": quality_score,
+        "quality_feedback": quality_feedback,
+    }
+
+
+@app.get("/api/resume/{resume_id}", tags=["Resume Analysis"])
+def get_resume_analysis(resume_id: int, user=Depends(get_current_user)):
+    """Get full analysis details for a stored resume, computing if missing."""
+    conn = get_db()
+    resume_row = conn.execute(
+        "SELECT * FROM resumes WHERE id = ? AND user_id = ?",
+        (resume_id, user["id"])
+    ).fetchone()
+
+    if not resume_row:
+        conn.close()
+        raise HTTPException(404, "Resume not found")
+
+    resume_data = _rebuild_resume_data(resume_row)
+
+    # Check if analysis is cached
+    quality_score = resume_row.get("quality_score")
+    quality_feedback = resume_row.get("quality_feedback")
+    
+    if quality_score is not None and quality_feedback is not None:
+        # Return cached analysis
+        quality_feedback_parsed = json.loads(quality_feedback)
+    else:
+        # Recompute missing data
+        quality_score, quality_feedback_parsed = _compute_resume_quality(resume_data)
+        
+        # Update DB for caching
+        conn.execute(
+            """UPDATE resumes 
+               SET quality_score = ?, quality_feedback = ?, word_count = ? 
+               WHERE id = ?""",
+            (quality_score, json.dumps(quality_feedback_parsed), resume_data["word_count"], resume_id)
+        )
+        conn.commit()
+
+    conn.close()
+
+    return {
+        "resume_id": resume_id,
+        "filename": resume_row["filename"],
         "skills": resume_data["skills"],
         "total_skills_found": resume_data["total_skills_found"],
         "education": resume_data["education"],
         "experience_years": resume_data["experience_years"],
         "contact": resume_data["contact"],
         "word_count": resume_data["word_count"],
-        "ner_entities": resume_data.get("ner_entities"),
         "quality_score": quality_score,
-        "quality_feedback": quality_feedback,
+        "quality_feedback": quality_feedback_parsed,
     }
 
+@app.delete("/api/resume/{resume_id}", tags=["Resume Analysis"])
+def delete_resume(resume_id: int, user=Depends(get_current_user)):
+    """Delete a resume and its match history."""
+    conn = get_db()
+    # Delete match history first due to foreign key constraints
+    conn.execute("DELETE FROM match_history WHERE resume_id = ? AND user_id = ?", (resume_id, user["id"]))
+    
+    # Delete resume
+    cursor = conn.execute("DELETE FROM resumes WHERE id = ? AND user_id = ?", (resume_id, user["id"]))
+    conn.commit()
+    conn.close()
+    
+    if cursor.rowcount == 0:
+        raise HTTPException(404, "Resume not found")
+        
+    return {"success": True, "message": "Resume deleted"}
 
 @app.post("/api/resume/match", tags=["Resume Analysis"])
 def match_resume_to_job(req: MatchJobRequest, user=Depends(get_current_user)):
@@ -440,6 +533,8 @@ def list_resumes(user=Depends(get_current_user)):
         (user["id"],)
     ).fetchall()
     conn.close()
+    
+    print(f"[DEBUG] Resumes fetched for user {user['id']}: {len(results)}")
 
     resumes = []
     for r in results:
@@ -482,16 +577,41 @@ def check_company(req: CompanyCheckRequest):
 # ========== Community Reporting Routes ==========
 
 @app.post("/api/reports/create", tags=["Community Reports"])
-def api_create_report(req: ReportRequest, user=Depends(get_current_user)):
+def api_create_report(
+    company_name: str = Form(...),
+    description: str = Form(...),
+    job_url: Optional[str] = Form(None),
+    job_title: Optional[str] = Form(None),
+    evidence: Optional[str] = Form(None),
+    category: Optional[str] = Form("other"),
+    file: Optional[UploadFile] = File(None),
+    user=Depends(get_current_user)
+):
     """Submit a scam report."""
+    import os
+    
+    evidence_text = evidence
+    if file and file.filename and os.getenv("ENABLE_REPORT_FILE_UPLOAD") == "true":
+        uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+        os.makedirs(uploads_dir, exist_ok=True)
+        import uuid
+        ext = file.filename.split(".")[-1] if "." in file.filename else "bin"
+        new_filename = f"{uuid.uuid4()}.{ext}"
+        filepath = os.path.join(uploads_dir, new_filename)
+        with open(filepath, "wb") as f:
+            f.write(file.file.read())
+        
+        file_url = f"/uploads/{new_filename}"
+        evidence_text = (evidence_text or "") + f"\n\nAttached File: {ORIGIN.replace('3000', '8000')}{file_url}"
+
     return create_report(
         user_id=user["id"],
-        company_name=req.company_name,
-        description=req.description,
-        job_url=req.job_url,
-        job_title=req.job_title,
-        evidence=req.evidence,
-        category=req.category,
+        company_name=company_name,
+        description=description,
+        job_url=job_url,
+        job_title=job_title,
+        evidence=evidence_text.strip() if evidence_text else None,
+        category=category,
     )
 
 
@@ -500,9 +620,11 @@ def api_get_reports(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     category: Optional[str] = None,
+    user=Depends(get_optional_user)
 ):
     """Get community scam reports."""
-    return get_reports(page=page, per_page=per_page, category=category)
+    user_id = user["id"] if user else None
+    return get_reports(page=page, per_page=per_page, category=category, user_id=user_id)
 
 
 @app.post("/api/reports/{report_id}/vote", tags=["Community Reports"])
