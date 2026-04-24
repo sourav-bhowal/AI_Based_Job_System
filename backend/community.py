@@ -26,25 +26,41 @@ def create_report(user_id: int, company_name: str, description: str,
     return {"report_id": report_id, "message": "Report submitted successfully"}
 
 
-def get_reports(page: int = 1, per_page: int = 20, category: str = None) -> dict:
+def get_reports(page: int = 1, per_page: int = 20, category: str = None, user_id: int = None) -> dict:
     """Get community reports with pagination."""
     conn = get_db()
     offset = (page - 1) * per_page
 
-    query = """
-        SELECT sr.*, u.username 
-        FROM scam_reports sr
-        LEFT JOIN users u ON sr.user_id = u.id
-    """
-    params = []
+    import os
+    include_user_vote = os.getenv("ENABLE_REPORT_VOTES_USER_STATE") == "true" and user_id is not None
+
+    if include_user_vote:
+        query = """
+            SELECT sr.*, u.username, rv.vote_type as user_vote
+            FROM scam_reports sr
+            LEFT JOIN users u ON sr.user_id = u.id
+            LEFT JOIN report_votes rv ON sr.id = rv.report_id AND rv.user_id = ?
+        """
+        params = [user_id]
+    else:
+        query = """
+            SELECT sr.*, u.username, NULL as user_vote
+            FROM scam_reports sr
+            LEFT JOIN users u ON sr.user_id = u.id
+        """
+        params = []
 
     if category:
         query += " WHERE sr.category = ?"
         params.append(category)
 
     # Total count
-    count_query = f"SELECT COUNT(*) AS cnt FROM ({query})"
-    total = list(conn.execute(count_query, params).fetchone().values())[0]
+    count_query = "SELECT COUNT(*) AS cnt FROM scam_reports"
+    count_params = []
+    if category:
+        count_query += " WHERE category = ?"
+        count_params.append(category)
+    total = list(conn.execute(count_query, count_params).fetchone().values())[0]
 
     query += " ORDER BY sr.created_at DESC LIMIT ? OFFSET ?"
     params.extend([per_page, offset])

@@ -1,6 +1,6 @@
 # AI Job Analysis and Detection System — Technical Documentation
 
-> **Version 2.0.0** | A full-stack AI-powered platform for detecting fraudulent job postings, analyzing resumes, and building a community-driven scam reporting ecosystem.
+> **Version 2.0.0** | A prototype-scale, full-stack AI-powered platform for detecting fraudulent job postings, analyzing resumes, and building a community-driven scam reporting ecosystem.
 
 ---
 
@@ -22,11 +22,12 @@
    - [Community Reporting Pipeline](#9-community-reporting-pipeline)
    - [Analytics Pipeline](#10-analytics-pipeline)
    - [PDF Report Generation Pipeline](#11-pdf-report-generation-pipeline)
-6. [Authentication System](#authentication-system)
-7. [API Reference](#api-reference)
-8. [Data Files & Serialized Models](#data-files--serialized-models)
-9. [Dependencies](#dependencies)
-10. [Setup & Running](#setup--running)
+6. [System Limitations & Future Work](#system-limitations--future-work)
+7. [Authentication System](#authentication-system)
+8. [API Reference](#api-reference)
+9. [Data Files & Serialized Models](#data-files--serialized-models)
+10. [Dependencies](#dependencies)
+11. [Setup & Running](#setup--running)
 
 ---
 
@@ -34,13 +35,14 @@
 
 The AI Job Analysis and Detection System is a **FastAPI-based backend** that combines multiple machine learning models, natural language processing, web scraping, and community-driven insights to help users identify fraudulent job postings. It provides:
 
+- **Multi-signal Web Scraping** — extracts data with block detection fallbacks for protected sites
 - **Multi-model ML scam detection** (5 classifiers compared and best selected)
 - **AI-generated text detection** — catches ChatGPT-written fake job postings (two options: TF-IDF + Random Forest, or BERT/RoBERTa transformer for higher accuracy)
 - **Explainable AI** — shows _why_ a posting was flagged, word-by-word
-- **Named Entity Recognition (NER)** — BERT transformer-powered entity extraction for job postings and resumes (`dslim/bert-base-NER`)
-- **Resume parsing** with skill extraction across 7 categories + NER entities
+- **Named Entity Recognition (NER)** — globally-cached BERT transformer-powered entity extraction for job postings and resumes (`dslim/bert-base-NER`)
+- **Resume parsing** with optimistic UI updates and skill extraction across 7 categories + NER entities
 - **Resume-to-job matching** with ATS score and training roadmap (two options: TF-IDF cosine similarity, or Sentence-BERT semantic matching)
-- **ML salary anomaly detection** — Random Forest Regressor Pipeline trained on dataset features (Position, Experience, Education, Industry, Location)
+- **ML salary anomaly detection** — Hybrid system using a Random Forest Regressor Pipeline refined by rule-based heuristic corrections (experience and internship multipliers)
 - **Company reputation scoring** from 4 weighted signals + NER validation
 - **Community scam reporting** with voting and auto-blacklisting
 - **PDF report generation** for scan results and match analyses
@@ -61,8 +63,8 @@ The AI Job Analysis and Detection System is a **FastAPI-based backend** that com
 | **Deep Learning (Opt.)** | PyTorch, HuggingFace Transformers, Sentence-BERT (`sentence-transformers`) — optional upgrade path |
 | **AI Text Detection**   | **Option A (default):** Random Forest + TF-IDF · **Option B:** RoBERTa transformer via HuggingFace |
 | **Resume-Job Matching** | **Option A (default):** TF-IDF cosine similarity · **Option B:** Sentence-BERT semantic embeddings |
-| **Salary Prediction**   | Random Forest Regressor Pipeline (trained on synthetic salary dataset)                 |
-| **NER**                 | BERT transformer (`dslim/bert-base-NER` via HuggingFace, ~92% F1)                     |
+| **Salary Prediction**   | Hybrid: Random Forest Regressor + Heuristic Post-Processing                            |
+| **NER**                 | BERT transformer (`dslim/bert-base-NER` via HuggingFace, globally cached, ~92% F1)                    |
 | **Web Scraping**        | Playwright (Chromium), BeautifulSoup4                                                 |
 | **Domain Analysis**     | python-whois                                                                          |
 | **Resume Parsing**      | PyPDF2, python-docx                                                                   |
@@ -143,6 +145,17 @@ ai-job-scam-detector/
 │   │   └── ner_bert/                         #   HuggingFace cache for dslim/bert-base-NER (auto-downloaded)
 
 ```
+
+---
+
+## System Limitations & Future Work
+
+As a prototype-scale application built for research and demonstration, the system has several known limitations that would need addressing for production scalability:
+
+1. **Scraping Restrictions:** The Playwright scraper is vulnerable to anti-automation protections commonly deployed by LinkedIn and Naukri. The current solution uses multi-signal block detection to gracefully fallback to a manual text-paste UI rather than implementing complex proxies.
+2. **Static ML Models:** While the community reporting feature builds a localized blacklist, the core ML models are static and do not retrain in real-time.
+3. **Heuristic Dependencies:** To compensate for limited ML training data, the salary pipeline relies on conditional heuristic adjustments (e.g., 0.7x multiplier for freshers, fixed ₹5 LPA cap for mass recruiters) to stabilize ML edge cases.
+4. **Memory Footprint:** Running deep learning pipelines (`dslim/bert-base-NER`) within a synchronous FastAPI worker environment consumes significant memory, which is currently mitigated by global loading and bounded LRU caching.
 
 ---
 

@@ -41,7 +41,10 @@ Imagine you're a job seeker. You find a job posting online. How do you know if i
          ▼
   ┌──────────────────────────────────────────────┐
   │  Layer 1: Web Scraping                       │
-  │  Pull the text off the web page              │
+  │  Pull the text off the web page. If the site │
+  │  blocks automation (using multi-signal       │
+  │  heuristics like title and content length),  │
+  │  fallback to manual job text input.          │
   ├──────────────────────────────────────────────┤
   │  Layer 2: ML Model Prediction                │
   │  Trained on 17,880 real job posts (scam vs   │
@@ -420,6 +423,7 @@ We use **`dslim/bert-base-NER`**, a BERT-base model fine-tuned on the CoNLL-2003
 - **Subword tokenization:** Complex words, names, and tech terms are handled via WordPiece tokenization
 - **CoNLL-2003 fine-tuning:** Trained on thousands of annotated news documents for high-precision entity recognition
 - **Long text chunking:** Texts longer than ~1500 characters are automatically split at sentence boundaries to respect BERT's 512-token limit
+- **Global Initialization & Caching:** The model is initialized globally at startup to avoid repeated loading costs. Inference is wrapped in `torch.no_grad()` to save memory, and a bounded LRU-style cache (`MAX_CACHE_SIZE = 100`) prevents repeated processing of identical inputs.
 
 ### Why Did We Add NER?
 
@@ -625,21 +629,18 @@ It adds practical value beyond scam detection. Users upload resumes anyway — t
 
 ---
 
-## Salary Prediction with Random Forest — ML-Enhanced Anomaly Detection
+## Salary Prediction — Hybrid ML & Rule-Based Approach
 
-### Why Upgrade from Heuristics to ML?
+### Why Upgrade from Pure Heuristics to a Hybrid System?
 
-The original salary detector used **hardcoded benchmarks** ("software engineer salary is $50K-$200K"). This works but has limitations:
+The original salary detector used **hardcoded benchmarks** ("software engineer salary is $50K-$200K"). This works but fails to adapt to experience levels. Pure ML predictions were insufficient for entry-level salary realism, which motivated the introduction of conditional heuristic adjustments.
 
-- Can't adapt to market changes
-- Doesn't consider experience level
-- Same thresholds for every situation
+To solve this, we implemented a **Hybrid Approach**: a Random Forest Regressor provides the baseline prediction, which is then refined by heuristic, rule-based post-processing.
 
-The **Random Forest Regressor** learns salary patterns from data, giving personalized predictions.
+### How the Hybrid Pipeline Works
 
-### How the RF Pipeline Works
-
-A **Scikit-Learn Pipeline** combines data preprocessing and the Random Forest Regressor into a single workflow.
+**Step 1: ML Baseline Prediction**
+A Scikit-Learn Pipeline processes extracted features through a Random Forest Regressor:
 
 ```
 Input Features Extracted from Job Text:
@@ -649,8 +650,14 @@ Preprocessing (ColumnTransformer):
   - Categorical features (Position, Education, etc.): OneHotEncoded
   - Numerical features (YearsExp): StandardScaler
 
-Output: predicted_salary (single number)
+Output: base_predicted_salary
 ```
+
+**Step 2: Structured Feature Post-Processing**
+We explicitly extract "fresher" and "internship" signals to apply heuristic adjustments, but these are conditional (not always applied) to prevent underestimation of realistic salaries:
+- **Internships / Freshers:** If the extracted salary is entirely missing or completely unrealistic, a multiplier (e.g., 0.7 or 0.85) is applied.
+- **Tolerance Bounds:** The system accepts a ~30–50% variance as normal market fluctuation before triggering an anomaly flag.
+- **Clamping:** Final entry-level predictions are clamped between realistic bounds (e.g., ₹2.5 LPA minimum, ₹12 LPA maximum).
 
 ### Training Data (`synthetic_salary_dataset.csv`)
 
@@ -690,10 +697,12 @@ Scam jobs often lure victims with _unrealistically high salaries_. We detect thi
 | Salary > 2.5× ML prediction         | +0.60         | Strong scam indicator ("Earn $400K as junior dev!")          |
 | Salary > 1.8× ML prediction         | +0.40         | Significantly above expected market rate                     |
 | Salary < 0.4× ML prediction         | +0.30         | Unusually low — may be exploitative                          |
-| Deviation > 50% from prediction     | +0.20         | Unusual deviation from expected range                        |
+| Deviation > 50% from prediction     | +0.20         | Unusual deviation from expected range (threshold slightly relaxed to 60-65% for freshers/internships) |
 | Very wide salary range               | +0.20         | "Salary: $20K-$200K" is vague and suspicious                |
-| Suspiciously round numbers           | +0.05         | "$100,000 exactly" is more common in fake postings           |
+| Extremely large round numbers        | +0.05         | e.g., exactly 20 LPA, 30 LPA in perfect multiples           |
 | No salary provided                   | +0.30         | Slightly suspicious (legit jobs usually disclose ranges)     |
+
+*Note: Anomaly is triggered only for extreme deviations. Normal salaries (e.g., 5–10 LPA) are NOT flagged, and standard round salary values are NOT treated as suspicious by default.*
 
 Score is capped at 1.0.
 
@@ -935,6 +944,17 @@ Actual  Scam  [  TP  |  FN  ]    TP = True Positive (correctly caught scam)
                                   FN = False Negative (scam slipped through)
                                   TN = True Negative (correctly identified legit)
 ```
+
+---
+
+## Design Decisions
+
+As a prototype-scale system, several key architectural tradeoffs were made to balance performance, reliability, and realism:
+
+1. **Hybrid Salary Logic Over Pure ML:** Pure ML predictions were insufficient for entry-level salary realism, which motivated the introduction of conditional heuristic adjustments. This hybrid ML + heuristic approach compensates for limitations in purely data-driven predictions.
+2. **Graceful Scraper Degradation:** Certain platforms (like LinkedIn or Naukri) implement aggressive anti-automation protections. Block detection is performed using multi-signal heuristics including page title, content length, and keyword patterns. When a block is detected, the system gracefully falls back to a manual job text input UI.
+3. **Global Model Loading:** Machine learning pipelines (like `dslim/bert-base-NER`) consume vast amounts of memory. By moving model initialization to the global scope with bounded caching and chunking for token limits, we ensure the model is loaded only once per worker process, optimizing performance and preventing memory leaks.
+4. **Optimistic UI Updates:** In the resume module, optimistic UI updates were implemented to provide immediate feedback when uploading documents and avoid reliance on server revalidation delays or stale cache issues.
 
 ---
 

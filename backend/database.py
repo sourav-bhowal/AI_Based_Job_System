@@ -164,6 +164,22 @@ def init_db():
     except Exception:
         pass  # Column already exists
 
+    # Add analysis columns
+    try:
+        cursor.execute("ALTER TABLE resumes ADD COLUMN quality_score REAL")
+    except Exception:
+        pass
+        
+    try:
+        cursor.execute("ALTER TABLE resumes ADD COLUMN quality_feedback TEXT")
+    except Exception:
+        pass
+        
+    try:
+        cursor.execute("ALTER TABLE resumes ADD COLUMN word_count INTEGER")
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
     print("Database initialized successfully!")

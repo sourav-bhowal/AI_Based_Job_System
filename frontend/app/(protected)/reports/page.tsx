@@ -13,15 +13,15 @@ export default async function ReportsPage() {
   const initialBlacklist = blacklistResult.status === "fulfilled" ? blacklistResult.value.blacklist : [];
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-6 py-8">
       {/* Header */}
-      <div className="mb-8">
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[var(--accent-subtle)] px-3 py-1 text-xs font-medium text-[var(--accent)]">
+      <div className="mb-8 text-center lg:text-left">
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[var(--accent-subtle)] px-3 py-1 text-xs font-medium text-[var(--accent)] border border-[var(--accent)]/10">
           <ShieldAlert className="h-4 w-4" />
           Crowdsourced Safety
         </div>
-        <h1 className="mb-2 text-3xl font-bold tracking-tight text-[var(--foreground)]">Community Reports</h1>
-        <p className="text-[var(--muted)]">Browse, submit, and vote on scam reports to help protect job seekers.</p>
+        <h1 className="mb-2 text-2xl lg:text-3xl font-bold tracking-tight text-[var(--foreground)]">Community Reports</h1>
+        <p className="text-[var(--muted)] text-sm lg:text-base">Browse, submit, and vote on scam reports to help protect job seekers.</p>
       </div>
 
       <ReportsClient

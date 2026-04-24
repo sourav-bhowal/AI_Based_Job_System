@@ -24,9 +24,9 @@ const variantStyles: Record<string, string> = {
 };
 
 const paddingStyles = {
-  sm: "p-4",
-  md: "p-6",
-  lg: "p-8",
+  sm: "p-3",
+  md: "p-5",
+  lg: "p-6",
 };
 
 export default function Card({
@@ -39,9 +39,8 @@ export default function Card({
   return (
     <div
       className={`
-        rounded-2xl border shadow-[var(--shadow-sm)]
+        rounded-xl border
         transition-all duration-200
-        hover:shadow-[var(--shadow-md)]
         ${variantStyles[variant]}
         ${paddingStyles[padding]}
         ${animate ? "animate-fade-in" : ""}

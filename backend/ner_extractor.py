@@ -25,12 +25,32 @@ Requires: torch, transformers  (already in requirements.txt)
 
 import os
 import re
+import torch
+from transformers import pipeline as hf_pipeline
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 NER_MODEL_DIR = os.path.join(SCRIPT_DIR, "models", "ner_bert")
 DEFAULT_NER_MODEL = "dslim/bert-base-NER"
 
-_ner_pipeline = None
+# ---------------------------------------------------------------------------
+# Global Model Initialization (Loaded once at startup)
+# ---------------------------------------------------------------------------
+_local_model_exists = os.path.exists(os.path.join(NER_MODEL_DIR, "config.json"))
+_model_path = NER_MODEL_DIR if _local_model_exists else DEFAULT_NER_MODEL
+_device = 0 if torch.cuda.is_available() else -1
+
+print(f"Loading BERT NER pipeline globally from {_model_path}...")
+_ner_pipeline = hf_pipeline(
+    "token-classification",
+    model=_model_path,
+    tokenizer=_model_path,
+    device=_device,
+    aggregation_strategy="simple",
+)
+print("BERT NER pipeline loaded globally.")
+
+# Simple cache for repeated inputs to save compute
+_ner_cache = {}
 
 _LABEL_MAP = {
     "PER": "PERSON",
@@ -39,31 +59,8 @@ _LABEL_MAP = {
     "MISC": "MISC",
 }
 
-MIN_ENTITY_SCORE = 0.60
-
-
-def _get_ner_pipeline():
-    """Lazy-load the BERT NER pipeline."""
-    global _ner_pipeline
-    if _ner_pipeline is not None:
-        return _ner_pipeline
-
-    import torch
-    from transformers import pipeline as hf_pipeline
-
-    local_model_exists = os.path.exists(os.path.join(NER_MODEL_DIR, "config.json"))
-    model_path = NER_MODEL_DIR if local_model_exists else DEFAULT_NER_MODEL
-
-    device = 0 if torch.cuda.is_available() else -1
-
-    _ner_pipeline = hf_pipeline(
-        "token-classification",
-        model=model_path,
-        tokenizer=model_path,
-        device=device,
-        aggregation_strategy="simple",
-    )
-    return _ner_pipeline
+MIN_ENTITY_SCORE = 0.55
+MAX_CACHE_SIZE = 100
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +70,8 @@ def _get_ner_pipeline():
 _MONEY_PATTERN = re.compile(
     r"[\$€£₹¥]\s*\d[\d,]*(?:\.\d+)?(?:\s*[kKmM]\b)?"
     r"|\d[\d,]*(?:\.\d+)?\s*(?:USD|EUR|GBP|INR|JPY|CAD|AUD)\b"
-    r"|\d[\d,]*(?:\.\d+)?\s*(?:per|/)\s*(?:year|month|week|hour|annum|yr|mo|hr)\b",
+    r"|\d[\d,]*(?:\.\d+)?\s*(?:per|/)\s*(?:year|month|week|hour|annum|yr|mo|hr)\b"
+    r"|\d+(?:\.\d+)?\s*(?:-\s*\d+(?:\.\d+)?)?\s*LPA\b",
     re.IGNORECASE,
 )
 
@@ -93,7 +91,23 @@ _DATE_PATTERN = re.compile(
 
 def _extract_money(text: str) -> list:
     """Extract monetary values from text using regex."""
-    return list(dict.fromkeys(m.strip() for m in _MONEY_PATTERN.findall(text)))
+    raw_matches = _MONEY_PATTERN.findall(text)
+    results = []
+    for m in raw_matches:
+        m = m.strip()
+        if not m:
+            continue
+        if "lpa" in m.lower():
+            nums = re.findall(r"(\d+(?:\.\d+)?)", m)
+            if len(nums) == 2:
+                results.append(f"₹{float(nums[0])*100000:,.0f} - ₹{float(nums[1])*100000:,.0f}")
+            elif len(nums) == 1:
+                results.append(f"₹{float(nums[0])*100000:,.0f}")
+            else:
+                results.append(m)
+        else:
+            results.append(m)
+    return list(dict.fromkeys(results))
 
 
 def _extract_dates(text: str) -> list:
@@ -110,10 +124,18 @@ def _chunk_and_extract(text: str, max_chars: int = 1500) -> list:
     Run BERT NER on *text*, splitting into sentence-boundary chunks when the
     text is too long for a single pass.  Returns de-duplicated pipeline entities.
     """
-    pipe = _get_ner_pipeline()
+    if text in _ner_cache:
+        return _ner_cache[text]
+
+    pipe = _ner_pipeline
 
     if len(text) <= max_chars:
-        return pipe(text)
+        with torch.no_grad():
+            result = pipe(text)
+        if len(_ner_cache) >= MAX_CACHE_SIZE:
+            _ner_cache.pop(next(iter(_ner_cache)))
+        _ner_cache[text] = result
+        return result
 
     sentences = re.split(r"(?<=[.!?\n])\s+", text)
     chunks, current = [], ""
@@ -131,13 +153,17 @@ def _chunk_and_extract(text: str, max_chars: int = 1500) -> list:
 
     all_entities = []
     seen = set()
-    for chunk in chunks:
-        for ent in pipe(chunk):
-            key = (ent["entity_group"], ent["word"].strip().lower())
-            if key not in seen:
-                seen.add(key)
-                all_entities.append(ent)
+    with torch.no_grad():
+        for chunk in chunks:
+            for ent in pipe(chunk):
+                key = (ent["entity_group"], ent["word"].strip().lower())
+                if key not in seen:
+                    seen.add(key)
+                    all_entities.append(ent)
 
+    if len(_ner_cache) >= MAX_CACHE_SIZE:
+        _ner_cache.pop(next(iter(_ner_cache)))
+    _ner_cache[text] = all_entities
     return all_entities
 
 

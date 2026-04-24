@@ -20,14 +20,7 @@ export async function createReportAction(
   try {
     const data = await serverFetch("/api/reports/create", {
       method: "POST",
-      body: JSON.stringify({
-        company_name,
-        description,
-        job_url,
-        job_title,
-        evidence,
-        category,
-      }),
+      body: formData,
     });
     return { success: true, data };
   } catch (error: any) {
