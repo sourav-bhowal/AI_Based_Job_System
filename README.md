@@ -40,14 +40,15 @@ The AI Job Analysis and Detection System is a **FastAPI-based backend** that com
 - **AI-generated text detection** — catches ChatGPT-written fake job postings (two options: TF-IDF + Random Forest, or BERT/RoBERTa transformer for higher accuracy)
 - **Explainable AI** — shows _why_ a posting was flagged, word-by-word
 - **Named Entity Recognition (NER)** — globally-cached BERT transformer-powered entity extraction for job postings and resumes (`dslim/bert-base-NER`)
-- **Resume parsing** with optimistic UI updates and skill extraction across 7 categories + NER entities
+- **Resume parsing and persistence** — data is persisted in a database (SQLite Cloud) with optimistic UI updates and skill extraction. Route shadowing and caching issues (resolved via `export const dynamic = "force-dynamic";`) have been addressed to ensure seamless hydration.
 - **Resume-to-job matching** with ATS score and training roadmap (two options: TF-IDF cosine similarity, or Sentence-BERT semantic matching)
 - **ML salary anomaly detection** — Hybrid system using a Random Forest Regressor Pipeline refined by rule-based heuristic corrections (experience and internship multipliers)
 - **Company reputation scoring** from 4 weighted signals + NER validation
 - **Community scam reporting** with voting and auto-blacklisting
-- **PDF report generation** for scan results and match analyses
+- **PDF report generation** — in-memory generation streaming directly to the client
 - **Analytics dashboard** with trends, distributions, and model comparison
-
+- **Modern SaaS UI** — compressed hero section, scrollable resume lists, responsive grid system, and improved feature hierarchy
+- **Robust Error Handling** — silent failure patterns were removed, ensuring all API errors are surfaced explicitly to prevent hidden data issues.
 ---
 
 ## Architecture & Tech Stack
@@ -148,14 +149,14 @@ ai-job-scam-detector/
 
 ---
 
-## System Limitations & Future Work
+## System Limitations
 
-As a prototype-scale application built for research and demonstration, the system has several known limitations that would need addressing for production scalability:
+As a prototype-scale application built for research and demonstration, the system has the following limitations:
 
-1. **Scraping Restrictions:** The Playwright scraper is vulnerable to anti-automation protections commonly deployed by LinkedIn and Naukri. The current solution uses multi-signal block detection to gracefully fallback to a manual text-paste UI rather than implementing complex proxies.
-2. **Static ML Models:** While the community reporting feature builds a localized blacklist, the core ML models are static and do not retrain in real-time.
-3. **Heuristic Dependencies:** To compensate for limited ML training data, the salary pipeline relies on conditional heuristic adjustments (e.g., 0.7x multiplier for freshers, fixed ₹5 LPA cap for mass recruiters) to stabilize ML edge cases.
-4. **Memory Footprint:** Running deep learning pipelines (`dslim/bert-base-NER`) within a synchronous FastAPI worker environment consumes significant memory, which is currently mitigated by global loading and bounded LRU caching.
+- **No real-time model retraining:** The core ML models use a static dataset and do not automatically retrain on new data.
+- **Heuristic adjustments used in salary prediction:** To compensate for limited ML training data, the salary pipeline relies on conditional heuristic adjustments to stabilize edge cases.
+- **Scraping may fail on protected sites:** Some job platforms (e.g., LinkedIn, Naukri) use anti-bot protections that may block automated scraping. In such cases, the system falls back to manual job description input.
+- **ML models run within backend process:** The models run directly in the synchronous FastAPI worker process, not in a distributed or microservice architecture.
 
 ---
 
@@ -181,30 +182,13 @@ Stores registered user accounts.
 
 ---
 
-## PDF Report Storage (Local + S3)
+## PDF Report Generation (Direct Streaming)
 
-Generated PDF reports are generated in memory and **only stored in Amazon S3** via `boto3`:
+Generated PDF reports are created in-memory using `fpdf2` and streamed directly to the client via FastAPI `StreamingResponse`. 
 
-- **Cloud path:**  
-  `s3://<AWS_S3_REPORTS_BUCKET>/<AWS_S3_REPORTS_PREFIX?>/(scan-reports|match-reports)/YYYY/MM/DD/<filename>.pdf`
-
-S3 uploads are handled by `report_generator.py` and are **required**:
-
-- If `AWS_S3_REPORTS_BUCKET` is missing or the S3 upload fails, report generation raises an error and the HTTP endpoint returns `500` with no URL.
-- API endpoints (`/api/reports/generate-scan-pdf`, `/api/reports/generate-match-pdf`) return a JSON response with a **pre‑signed S3 download URL** instead of streaming a local file.
-
-To configure S3:
-
-- **Environment variables (required/optional):**
-  - `AWS_S3_REPORTS_BUCKET` **or** `AWS_S3_BUCKET_NAME` — **required** S3 bucket name where reports are stored
-  - `AWS_S3_REPORTS_PREFIX` — _optional_ prefix inside the bucket, e.g. `ai-job-scam-detector`  
-    (final keys look like `ai-job-scam-detector/scan-reports/2026/03/18/...`)
-  - `AWS_S3_ENDPOINT` — _optional_ custom S3 endpoint (e.g. Supabase S3-compatible storage)
-- **AWS credentials/region:**
-  - Use the standard AWS provider chain: environment variables, shared credentials file, or IAM role.
-  - Region is resolved from `AWS_REGION` / `AWS_DEFAULT_REGION` or your AWS config.
-
-No secrets are committed to the repo — set credentials and bucket details in your local `.env`/deployment environment or your deployment platform.
+- **No Local Storage:** PDFs are never saved to disk on the server.
+- **No S3 Storage:** Dependencies on Amazon S3 and pre-signed URLs have been completely removed for a faster, stateless architecture.
+- **Secure Proxy Flow:** To protect authentication tokens, the Next.js frontend uses a Backend-For-Frontend (BFF) API route. The Next.js route securely reads the `httpOnly` auth cookie and forwards the request to the FastAPI backend, which streams the binary PDF back to the browser.
 
 ### Table 2: `scan_history`
 
@@ -1192,18 +1176,20 @@ Triggered by `POST /api/reports/generate-match-pdf`. Sections:
 | **Secret Key**       | Environment variable `SECRET_KEY` (defaults to dev key) |
 | **Token Payload**    | `{"sub": "<user_id>", "exp": "<timestamp>"}`            |
 
-**Two authentication dependencies:**
+## Authentication System
 
-- `get_current_user` — **Required** auth. Raises 401 if no/invalid token.
-- `get_optional_user` — **Optional** auth. Returns `None` for unauthenticated requests.
+Authentication is handled using `httpOnly` cookies to prevent client-side access to tokens.
+
+Since `httpOnly` cookies cannot be accessed in the browser (to protect against XSS), a Next.js API route is used as a backend-for-frontend (BFF) layer. This route reads the cookie server-side and attaches the Bearer token to backend requests via the `Authorization` header.
+
+This ensures secure communication without exposing tokens in the frontend client.
 
 **Registration flow:**
-
 1. Check uniqueness (username, email)
 2. Hash password with bcrypt
 3. Insert into `users` table
-4. Generate JWT token
-5. Return user info + token
+4. Generate JWT token and set as `httpOnly` cookie via Next.js
+5. Return user info
 
 ---
 

@@ -188,15 +188,16 @@ This multi-signal ensemble reduces variance and provides robustness against adve
 
 As a prototype-scale implementation, this system operates under several known constraints:
 
-### 8.1 Web Scraping Protections
-Major job portals (e.g., LinkedIn, Naukri) actively implement anti-automation protections (CAPTCHAs, Access Denied walls). The system detects these blocks and gracefully falls back to a manual text-paste interface rather than attempting complex bypass mechanisms.
+### 8.1 No Real-time Model Retraining
+The core fraud detection models are trained on a static dataset (`fake_job_postings.csv`). While community reports build an active blacklist, they do not currently form an automated feedback loop to fine-tune the ML models in real-time.
 
-### 8.2 Dataset Bias & Model Drift
-The core fraud detection models are trained on a static dataset (`fake_job_postings.csv`). While community reports build an active blacklist, they do not currently form an automated feedback loop to fine-tune the Random Forest/SVM models in real-time.
+### 8.2 Heuristic Adjustments in Salary Prediction
+To compensate for limited ML training data, the salary prediction pipeline relies on conditional heuristic adjustments (e.g., multipliers for freshers/internships, caps for mass recruiters) to stabilize ML edge cases.
 
-### 8.3 Heuristic Dependencies
-To compensate for limited ML training data, the salary prediction and risk scoring pipelines rely on hardcoded heuristic adjustments (e.g., the 0.5x multiplier for internships, static currency conversion rates). While effective for the prototype, these bounds require manual maintenance to reflect evolving market conditions.
+### 8.3 Web Scraping Protections
+Some job platforms (e.g., LinkedIn, Naukri) actively implement anti-bot protections that may block automated scraping. In such cases, the system gracefully falls back to a manual job description input interface.
 
----
+### 8.4 Process Architecture
+Deep learning pipelines (`dslim/bert-base-NER`) and ML models currently run directly within the synchronous FastAPI backend process, rather than being offloaded to a distributed GPU-cluster or microservice architecture.
 
 _Dataset: 17,880 labeled job postings | 5 classifiers | class_weight="balanced" | 82.20% F1 | Linear SVM + CalibratedClassifierCV selected | TF-IDF (5K features, bigrams)_
