@@ -21,6 +21,9 @@
 
 ## 1. Authentication
 
+> [!NOTE]
+> When integrating with the Next.js frontend, authentication tokens are managed securely via `httpOnly` cookies. The frontend uses a Backend-For-Frontend (BFF) Next.js API route that automatically reads the cookie and proxies the request to these backend endpoints with the `Authorization: Bearer <token>` header attached, ensuring the raw token is never exposed to client-side JavaScript.
+
 ### `POST /api/auth/register`
 
 Register a new user account.
@@ -881,7 +884,7 @@ Get scam report distribution by category.
 
 ### `POST /api/reports/generate-scan-pdf`
 
-Generate a scan PDF report for a job URL and upload it to S3.
+Generate a scan PDF report for a job URL and stream it directly to the client.
 
 **Headers:** `Authorization: Bearer <token>` _(optional)_
 
@@ -895,17 +898,10 @@ Generate a scan PDF report for a job URL and upload it to S3.
 
 **Success Response `200`:**
 
-Returns a JSON payload containing a short‑lived pre‑signed S3 URL:
-
-```json
-{
-  "download_url": "https://s3.amazonaws.com/your-bucket/scan-reports/2026/03/18/scan_report_20260318_101500.pdf?...",
-  "s3_url": "s3://your-bucket/scan-reports/2026/03/18/scan_report_20260318_101500.pdf"
-}
-```
+Returns a binary stream of the generated PDF file with the `Content-Disposition: attachment` header.
 
 > [!NOTE]
-> Report generation **requires** a valid S3 configuration (either `AWS_S3_REPORTS_BUCKET` or `AWS_S3_BUCKET_NAME`, optional `AWS_S3_REPORTS_PREFIX`, optional `AWS_S3_ENDPOINT`). If upload or configuration fails, the endpoint returns `500` and no URL is returned.
+> Reports are generated entirely in-memory using `fpdf2` and are never saved to disk or S3.
 
 **Error Responses:**
 
@@ -918,7 +914,7 @@ Returns a JSON payload containing a short‑lived pre‑signed S3 URL:
 
 ### `POST /api/reports/generate-match-pdf`
 
-Generate a resume-job match PDF report and upload it to S3.
+Generate a resume-job match PDF report and stream it directly to the client.
 
 **Headers:** `Authorization: Bearer <token>` _(required)_
 
@@ -934,17 +930,10 @@ Generate a resume-job match PDF report and upload it to S3.
 
 **Success Response `200`:**
 
-Returns a JSON payload with a pre‑signed S3 URL:
-
-```json
-{
-  "download_url": "https://s3.amazonaws.com/your-bucket/match-reports/2026/03/18/match_report_20260318_101500.pdf?...",
-  "s3_url": "s3://your-bucket/match-reports/2026/03/18/match_report_20260318_101500.pdf"
-}
-```
+Returns a binary stream of the generated PDF file with the `Content-Disposition: attachment` header.
 
 > [!NOTE]
-> Like scan reports, match reports are only stored in S3. If S3 upload or configuration fails, the endpoint responds with `500` and no URL is returned.
+> Match reports are generated entirely in-memory using `fpdf2` and streamed directly to the client.
 
 **Error Responses:**
 
