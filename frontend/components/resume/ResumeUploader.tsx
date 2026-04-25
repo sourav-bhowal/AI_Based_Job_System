@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { uploadResumeAction, matchResumeAction, downloadMatchPdfAction, getResumeAnalysisAction, deleteResumeAction } from "@/lib/actions/resume";
+import { uploadResumeAction, matchResumeAction, getResumeAnalysisAction, deleteResumeAction } from "@/lib/actions/resume";
 import type { ResumeListItem, ResumeUploadResult, MatchResult } from "@/lib/types";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import ErrorDisplay from "@/components/ErrorDisplay";
@@ -18,10 +18,9 @@ export default function ResumeUploader({
   
   const [resumes, setResumes] = useState<ResumeListItem[]>(initialResumes);
   
+  // Always sync server-fetched data to client state (no length guard — that causes stale data)
   useEffect(() => {
-    if (initialResumes.length > 0) {
-      setResumes(initialResumes);
-    }
+    setResumes(initialResumes);
   }, [initialResumes]);
 
   const [selectedResumeId, setSelectedResumeId] = useState<number | null>(null);
@@ -86,16 +85,38 @@ export default function ResumeUploader({
     if (!selectedResumeId || !matchedParams) return;
     
     startPdfDownload(async () => {
-      const res = await downloadMatchPdfAction(
-        selectedResumeId,
-        matchedParams.jobUrl || undefined,
-        matchedParams.jobText || undefined
-      );
-      
-      if (res.success && res.downloadUrl) {
-        window.open(res.downloadUrl, '_blank');
-      } else {
-        alert(res.error || "Failed to download PDF.");
+      try {
+        const response = await fetch("/api/reports/generate-match-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            resume_id: selectedResumeId,
+            job_url: matchedParams.jobUrl || undefined,
+            job_text: matchedParams.jobText || undefined,
+          }),
+        });
+
+        if (!response.ok) {
+          const err = await response.text();
+          let detail = "Failed to generate PDF";
+          try { detail = JSON.parse(err).detail || detail; } catch {}
+          throw new Error(detail);
+        }
+
+        const blob = await response.blob();
+        const disposition = response.headers.get("Content-Disposition");
+        const filename = disposition?.split("filename=")[1]?.replace(/"/g, "") || "match_report.pdf";
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (err: any) {
+        alert(err.message || "Failed to download PDF.");
       }
     });
   };
@@ -269,50 +290,57 @@ export default function ResumeUploader({
   const resumesLibrarySection = resumes.length > 0 ? (
     <div className="mb-6">
       <h2 className="mb-3 text-sm font-bold uppercase tracking-widest text-[var(--muted)]">Your Resumes</h2>
-      <div className="space-y-2">
-        {resumes.map((r) => (
-          <div key={r.id} onClick={() => setSelectedResumeId(prev => prev === r.id ? null : r.id)}
-            className={`group cursor-pointer rounded-xl border p-3 transition-all duration-200 ${selectedResumeId === r.id
-              ? "border-[var(--accent)] bg-[var(--accent-subtle)]"
-              : "border-[var(--card-border)] bg-[var(--card)] hover:border-[var(--muted)]/50"}`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${selectedResumeId === r.id ? "bg-[var(--accent)] text-white" : "bg-[var(--card-border)] text-[var(--muted)]"}`}>
-                  <FileText className="h-4 w-4" />
+      {/* Scroll container with fade hints */}
+      <div className="relative">
+        {/* Top fade hint */}
+        <div className="pointer-events-none absolute top-0 left-0 right-0 z-10 h-5 rounded-t-xl bg-gradient-to-b from-[var(--background)] to-transparent opacity-0 transition-opacity [:has(>.scrollbar-thin:not(:first-child)):hover>&]:opacity-100" />
+        <div className="max-h-[260px] sm:max-h-[320px] overflow-y-auto pr-1 scrollbar-thin space-y-2">
+          {resumes.map((r) => (
+            <div key={r.id} onClick={() => setSelectedResumeId(prev => prev === r.id ? null : r.id)}
+              className={`group cursor-pointer rounded-xl border p-3 transition-all duration-200 ${selectedResumeId === r.id
+                ? "border-[var(--accent)] bg-[var(--accent)]/[0.08] shadow-[0_0_0_1px_var(--accent)]/10"
+                : "border-[var(--card-border)] bg-[var(--card)] hover:border-[var(--muted)]/50 hover:bg-[var(--card-border)]/20"}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ${selectedResumeId === r.id ? "bg-[var(--accent)] text-white" : "bg-[var(--card-border)] text-[var(--muted)]"}`}>
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-sm font-bold text-[var(--foreground)] block leading-tight truncate">{r.filename}</span>
+                    <span className="text-xs font-medium text-[var(--muted)]">{new Date(r.uploaded_at).toLocaleDateString("en-US")}</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-sm font-bold text-[var(--foreground)] block leading-tight">{r.filename}</span>
-                  <span className="text-xs font-medium text-[var(--muted)]">{new Date(r.uploaded_at).toLocaleDateString("en-US")}</span>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    type="button"
+                    onClick={(e) => handleViewAnalysis(e, r.id)}
+                    disabled={isFetchingAnalysis || isDeleting}
+                    title="View Analysis"
+                    className="rounded-lg bg-[var(--accent-subtle)] p-2 text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white transition-colors flex items-center justify-center disabled:opacity-50"
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteResume(e, r.id)}
+                    disabled={isFetchingAnalysis || isDeleting}
+                    title="Delete Resume"
+                    className="rounded-lg bg-[var(--danger)]/10 p-2 text-[var(--danger)] hover:bg-[var(--danger)] hover:text-white transition-colors flex items-center justify-center disabled:opacity-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
-              </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  type="button"
-                  onClick={(e) => handleViewAnalysis(e, r.id)}
-                  disabled={isFetchingAnalysis || isDeleting}
-                  title="View Analysis"
-                  className="rounded-lg bg-[var(--accent-subtle)] p-2 text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white transition-colors flex items-center justify-center disabled:opacity-50"
-                >
-                  <BarChart3 className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => handleDeleteResume(e, r.id)}
-                  disabled={isFetchingAnalysis || isDeleting}
-                  title="Delete Resume"
-                  className="rounded-lg bg-[var(--danger)]/10 p-2 text-[var(--danger)] hover:bg-[var(--danger)] hover:text-white transition-colors flex items-center justify-center disabled:opacity-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="flex items-center ml-2 min-w-[24px]">
-                {selectedResumeId === r.id && (
-                  <CheckCircle2 className="h-5 w-5 text-[var(--accent)]" />
-                )}
+                <div className="flex items-center ml-2 min-w-[24px]">
+                  {selectedResumeId === r.id && (
+                    <CheckCircle2 className="h-5 w-5 text-[var(--accent)]" />
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+        {/* Bottom fade hint — visible when list overflows */}
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 rounded-b-xl bg-gradient-to-t from-[var(--background)] to-transparent" />
       </div>
       {(isFetchingAnalysis || isDeleting) && <LoadingSpinner message="Processing..." />}
       {analysisError && <div className="mt-4"><ErrorDisplay message={analysisError} onRetry={() => setAnalysisError(null)} /></div>}
