@@ -409,6 +409,35 @@ async def upload_resume(file: UploadFile = File(...), user=Depends(get_current_u
     }
 
 
+# IMPORTANT: Static paths MUST be declared before dynamic {resume_id} paths
+# to prevent FastAPI route shadowing (otherwise "list" gets captured as resume_id)
+@app.get("/api/resume/list", tags=["Resume Analysis"])
+def list_resumes(user=Depends(get_current_user)):
+    """List all uploaded resumes for the user."""
+    print(f"[DEBUG] /api/resume/list hit | user: {user['id']}")
+    conn = get_db()
+    results = conn.execute(
+        "SELECT id, filename, skills, experience, education, uploaded_at FROM resumes WHERE user_id = ? ORDER BY uploaded_at DESC",
+        (user["id"],)
+    ).fetchall()
+    conn.close()
+    
+    print(f"[DEBUG] Resumes fetched for user {user['id']}: {len(results)}")
+
+    resumes = []
+    for r in results:
+        resumes.append({
+            "id": r["id"],
+            "filename": r["filename"],
+            "skills": json.loads(r["skills"]) if r["skills"] else {},
+            "experience": r["experience"],
+            "education": json.loads(r["education"]) if r["education"] else [],
+            "uploaded_at": r["uploaded_at"],
+        })
+
+    return {"resumes": resumes}
+
+
 @app.get("/api/resume/{resume_id}", tags=["Resume Analysis"])
 def get_resume_analysis(resume_id: int, user=Depends(get_current_user)):
     """Get full analysis details for a stored resume, computing if missing."""
@@ -522,32 +551,6 @@ def match_resume_to_job(req: MatchJobRequest, user=Depends(get_current_user)):
     conn.close()
 
     return match_result
-
-
-@app.get("/api/resume/list", tags=["Resume Analysis"])
-def list_resumes(user=Depends(get_current_user)):
-    """List all uploaded resumes for the user."""
-    conn = get_db()
-    results = conn.execute(
-        "SELECT id, filename, skills, experience, education, uploaded_at FROM resumes WHERE user_id = ? ORDER BY uploaded_at DESC",
-        (user["id"],)
-    ).fetchall()
-    conn.close()
-    
-    print(f"[DEBUG] Resumes fetched for user {user['id']}: {len(results)}")
-
-    resumes = []
-    for r in results:
-        resumes.append({
-            "id": r["id"],
-            "filename": r["filename"],
-            "skills": json.loads(r["skills"]) if r["skills"] else {},
-            "experience": r["experience"],
-            "education": json.loads(r["education"]) if r["education"] else [],
-            "uploaded_at": r["uploaded_at"],
-        })
-
-    return {"resumes": resumes}
 
 
 @app.get("/api/resume/match-history", tags=["Resume Analysis"])
@@ -770,7 +773,9 @@ def api_generate_scan_pdf(req: JobRequest, user=Depends(get_optional_user)):
 
 @app.post("/api/reports/generate-match-pdf", tags=["PDF Reports"])
 def api_generate_match_pdf(req: MatchJobRequest, user=Depends(get_current_user)):
-    """Generate a PDF report for resume-job match. Tries S3, falls back to local serving."""
+    """Generate a PDF report for resume-job match. Returns the PDF directly as a download."""
+    import io
+
     conn = get_db()
     resume_row = conn.execute(
         "SELECT * FROM resumes WHERE id = ? AND user_id = ?",
@@ -795,23 +800,63 @@ def api_generate_match_pdf(req: MatchJobRequest, user=Depends(get_current_user))
 
     match_result = compute_match_score(resume_data, job_text)
 
-    # Try S3 first
-    try:
-        s3_url, s3_key = generate_resume_match_report(resume_data, match_result, req.job_url)
-        s3 = _get_s3_client()
-        bucket = os.getenv("AWS_S3_REPORTS_BUCKET") or os.getenv("AWS_S3_BUCKET_NAME")
-        presigned_url = s3.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": bucket, "Key": s3_key},
-            ExpiresIn=600,
-        )
-        return {"download_url": presigned_url, "s3_url": s3_url}
-    except Exception:
-        pass
+    # Build PDF in memory using report generator
+    pdf = ScamReportPDF()
+    pdf.alias_nb_pages()
+    pdf.add_page()
+    pdf.section_title("Resume-Job Match Report")
+    pdf.add_key_value("Resume", resume_row["filename"])
+    pdf.add_key_value("Job URL", req.job_url or "Direct text")
+    pdf.add_key_value("Match Score", f"{match_result.get('match_score', 0)}%")
+    pdf.add_key_value("ATS Score", f"{match_result.get('ats_score', {}).get('score', 0)}%")
+    pdf.add_key_value("Skills Matched", f"{match_result.get('matching_skills_count', 0)}/{match_result.get('total_job_skills', 0)}")
+    pdf.ln(5)
+    if match_result.get("strengths"):
+        pdf.section_title("Your Strengths")
+        pdf.add_bullet_list([s.get("message", s.get("skill", "")) for s in match_result["strengths"][:10]])
+    if match_result.get("weaknesses"):
+        pdf.section_title("Areas to Improve")
+        pdf.add_bullet_list([w.get("message", w.get("skill", "")) for w in match_result["weaknesses"][:10]])
+    if match_result.get("training_roadmap"):
+        pdf.section_title("Personalized Training Roadmap")
+        for step in match_result["training_roadmap"]:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(0, 7, f"{step['week']} - Learn {step['skill'].title()} ({step['priority'].upper()} priority)", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "", 9)
+            pdf.cell(0, 6, f"  Goal: {step['goal']}", new_x="LMARGIN", new_y="NEXT")
+            if step.get("resources"):
+                for resource in step["resources"]:
+                    pdf.cell(0, 6, f"    - {resource['title']} ({resource['platform']})", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(2)
+    if match_result.get("ats_score", {}).get("feedback"):
+        pdf.section_title("ATS Optimization Tips")
+        for tip in match_result["ats_score"]["feedback"]:
+            prefix = "+" if tip["type"] == "good" else ("!" if tip["type"] == "error" else "-")
+            pdf.set_font("Helvetica", "", 10)
+            pdf.cell(0, 6, f"  {prefix} {tip['message']}", new_x="LMARGIN", new_y="NEXT")
+    pdf.section_title("Disclaimer")
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.multi_cell(0, 5, "This report is generated by an AI-based system for informational purposes only.")
 
-    # Fallback: serve locally
+    # Convert to bytes
+    pdf_raw = pdf.output(dest="S")
+    if isinstance(pdf_raw, str):
+        pdf_bytes = pdf_raw.encode("latin-1")
+    else:
+        pdf_bytes = bytes(pdf_raw)
+
+    # Stream directly — no disk, no S3
+    from fastapi.responses import StreamingResponse
     from datetime import datetime as dt
-    return {"download_url": f"http://localhost:8000/api/reports/download/match_fallback_{dt.now().strftime('%Y%m%d_%H%M%S')}.pdf"}
+    fname = f"match_report_{dt.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{fname}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        }
+    )
 
 
 # ========== Health Check ==========

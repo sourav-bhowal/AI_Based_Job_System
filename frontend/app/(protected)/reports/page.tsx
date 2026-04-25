@@ -2,6 +2,8 @@ import { getReportsSSR, getBlacklistSSR } from "@/lib/api-server";
 import ReportsClient from "./ReportsClient";
 import { ShieldAlert } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export default async function ReportsPage() {
   const [reportsResult, blacklistResult] = await Promise.allSettled([
     getReportsSSR(1, 20),

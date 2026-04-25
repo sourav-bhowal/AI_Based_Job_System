@@ -1,6 +1,6 @@
 "use server";
 
-import { uploadResumeSSR, matchResumeSSR, generateMatchPdfSSR, getResumeAnalysisSSR, deleteResumeSSR } from "@/lib/api-server";
+import { uploadResumeSSR, matchResumeSSR, getResumeAnalysisSSR, deleteResumeSSR } from "@/lib/api-server";
 import { ResumeUploadResult, MatchResult } from "@/lib/types";
 import { revalidatePath } from "next/cache";
 
@@ -80,18 +80,5 @@ export async function matchResumeAction(
       msg = "Scraping blocked by the host site (e.g., LinkedIn). Please paste the job text manually.";
     }
     return { success: false, error: msg };
-  }
-}
-
-export async function downloadMatchPdfAction(
-  resumeId: number,
-  jobUrl?: string,
-  jobText?: string
-) {
-  try {
-    const data = await generateMatchPdfSSR(resumeId, jobUrl, jobText);
-    return { success: true, downloadUrl: data.download_url };
-  } catch (error: any) {
-    return { success: false, error: error.message || "Failed to generate PDF" };
   }
 }

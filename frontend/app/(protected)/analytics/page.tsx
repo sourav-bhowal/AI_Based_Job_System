@@ -15,6 +15,8 @@ import type {
 import Card from "@/components/Card";
 import { Users, Search, AlertOctagon, FileText, Ban, TrendingUp, Calendar, AlertTriangle, Building2, Server, BrainCircuit, Activity } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export default async function AnalyticsPage() {
   const results = await Promise.allSettled([
     getAnalyticsOverviewSSR(),

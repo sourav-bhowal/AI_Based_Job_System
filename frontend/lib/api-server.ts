@@ -31,6 +31,8 @@ export async function serverFetch<T = any>(
   const cookieStore = await cookies();
   const token = cookieStore.get("auth_token")?.value;
 
+  console.log(`[DEBUG serverFetch] ${endpoint} | token: ${token ? "YES (" + token.substring(0, 10) + "...)" : "MISSING"}`);
+
   const headers = new Headers(options?.headers);
   const isFormData = options?.body instanceof FormData;
   if (!headers.has("Content-Type") && !isFormData) {
@@ -46,6 +48,8 @@ export async function serverFetch<T = any>(
     headers,
   });
 
+  console.log(`[DEBUG serverFetch] ${endpoint} | status: ${res.status}`);
+
   if (!res.ok) {
     const errorBody = await res.text();
     let detail = res.statusText;
@@ -53,6 +57,7 @@ export async function serverFetch<T = any>(
       const parsed = JSON.parse(errorBody);
       detail = parsed.detail || detail;
     } catch { }
+    console.error(`[ERROR serverFetch] ${endpoint} | ${res.status} | ${detail}`);
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
 
@@ -225,16 +230,6 @@ export async function generateScanPdfSSR(url: string): Promise<{ download_url: s
   });
 }
 
-export async function generateMatchPdfSSR(
-  resume_id: number,
-  job_url?: string,
-  job_text?: string
-): Promise<{ download_url: string, s3_url: string }> {
-  return serverFetch<{ download_url: string, s3_url: string }>("/api/reports/generate-match-pdf", {
-    method: "POST",
-    body: JSON.stringify({ resume_id, job_url, job_text }),
-  });
-}
 
 // ========== System ==========
 
