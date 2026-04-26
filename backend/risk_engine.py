@@ -58,7 +58,7 @@ def domain_risk(email):
     
     domain = email.split("@")[-1]
 
-    if domain in ["gmail.com", "yahoo.com", "outlook.com"]:
+    if domain in ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "rediffmail.com", "protonmail.com"]:
         return 0.7
 
     try:
