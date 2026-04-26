@@ -126,10 +126,7 @@ ai-job-scam-detector/
 │   ├── report_generator.py          # PDF report generation (scan & match reports)
 │   ├── requirements.txt             # Python dependencies
 │   │
-│   ├── database/                         # SQLite runtime database (auto-created)
-│   │   └── scam_detector.db              #   Main application database
-│   │
-│   ├── datasets/                         # Training datasets
+│   ├── data/                         # Training datasets
 │   │   ├── fake_job_postings.csv         #   Job scam detection (~50 MB, 17,880 rows)
 │   │   ├── AI_Human.csv                  #   AI text detection (~1.06 GB, ~500K rows)
 │   │   └── synthetic_salary_dataset.csv  #   Salary prediction (~28 KB, ~500 rows)
